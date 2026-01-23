@@ -1,0 +1,176 @@
+# purpose: Evidence capture for netbox_seed runs (ctrl-01 helper pipeline)
+# adr: ADR-0002
+# maintainer: HybridOps.Studio
+
+- name: Set run identifiers
+  ansible.builtin.set_fact:
+    _netbox_seed_run_id: "{{ ansible_date_time.iso8601_basic_short }}"
+    _netbox_seed_host_evidence_dir: "{{ netbox_seed_evidence_dir }}"
+    _netbox_seed_repo_artifacts_dir: >-
+      {{
+        netbox_seed_artifacts_dir
+        | default(netbox_seed_repo_root ~ '/output/artifacts/netbox/seed/' ~ ansible_date_time.iso8601_basic_short, true)
+      }}
+  changed_when: false
+
+- name: Ensure host evidence directory exists
+  ansible.builtin.file:
+    path: "{{ _netbox_seed_host_evidence_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+
+- name: Ensure repo artifacts directory exists
+  ansible.builtin.file:
+    path: "{{ _netbox_seed_repo_artifacts_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when: netbox_seed_artifacts_enabled | default(false) | bool
+
+- name: Capture NetBox API status
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url.rstrip('/') }}/api/status/"
+    headers:
+      Authorization: "Token {{ netbox_api_token }}"
+    validate_certs: "{{ netbox_seed_validate_tls | bool }}"
+    status_code: [ 200 ]
+    return_content: true
+  register: _nb_status
+  changed_when: false
+  failed_when: false
+
+- name: Build redacted API status payload
+  ansible.builtin.set_fact:
+    _netbox_seed_api_status_redacted:
+      fetched_at: "{{ ansible_date_time.iso8601 }}"
+      api_url: "{{ netbox_api_url.rstrip('/') }}"
+      ok: "{{ (_nb_status.status | default(0) | int) == 200 }}"
+      status_code: "{{ _nb_status.status | default(0) }}"
+      netbox:
+        version: "{{ _nb_status.json.netbox_version | default(_nb_status.json.netbox.version | default('')) }}"
+        python_version: "{{ _nb_status.json.python_version | default('') }}"
+        django_version: "{{ _nb_status.json.django_version | default('') }}"
+        plugins: "{{ _nb_status.json.plugins | default([]) }}"
+  changed_when: false
+
+- name: Write run summary (host evidence)
+  ansible.builtin.copy:
+    dest: "{{ _netbox_seed_host_evidence_dir }}/run-summary.txt"
+    content: |
+      run_id={{ _netbox_seed_run_id }}
+      repo_root={{ netbox_seed_repo_root }}
+      target={{ netbox_seed_target }}
+      validate_tls={{ netbox_seed_validate_tls | bool }}
+      run_export={{ netbox_seed_run_export | bool }}
+      run_ipam={{ netbox_seed_run_ipam | bool }}
+      run_vms={{ netbox_seed_run_vms | bool }}
+      run_devices={{ netbox_seed_run_devices | bool }}
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Write API status (host evidence)
+  ansible.builtin.copy:
+    dest: "{{ _netbox_seed_host_evidence_dir }}/netbox-api-status.redacted.json"
+    content: "{{ _netbox_seed_api_status_redacted | to_nice_json }}"
+    owner: root
+    group: root
+    mode: "0640"
+
+- name: Write phase summaries (host evidence)
+  ansible.builtin.copy:
+    dest: "{{ _netbox_seed_host_evidence_dir }}/phases.txt"
+    content: |
+      export:  rc={{ _export.rc | default('n/a') }}  enabled={{ netbox_seed_run_export | bool }}
+      ipam:    rc={{ _ipam.rc | default('n/a') }}    enabled={{ netbox_seed_run_ipam | bool }}
+      vms:     rc={{ _vms.rc | default('n/a') }}     enabled={{ netbox_seed_run_vms | bool }}
+      devices: rc={{ _devices.rc | default('n/a') }} enabled={{ netbox_seed_run_devices | bool }}
+    owner: root
+    group: root
+    mode: "0640"
+
+# ---- Optional command tails (host evidence). Opt-in because logs can be noisy. ----
+
+- name: Write export tails (host evidence)
+  ansible.builtin.copy:
+    dest: "{{ _netbox_seed_host_evidence_dir }}/export.{{ item.stream }}.tail.txt"
+    content: "{{ (item.content | default(''))[-8000:] }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+  - { stream: "stdout", content: "{{ _export.stdout | default('') }}" }
+  - { stream: "stderr", content: "{{ _export.stderr | default('') }}" }
+  when:
+  - netbox_seed_evidence_include_command_tails | default(false) | bool
+  - netbox_seed_run_export | bool
+
+- name: Write ipam tails (host evidence)
+  ansible.builtin.copy:
+    dest: "{{ _netbox_seed_host_evidence_dir }}/ipam.{{ item.stream }}.tail.txt"
+    content: "{{ (item.content | default(''))[-8000:] }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+  - { stream: "stdout", content: "{{ _ipam.stdout | default('') }}" }
+  - { stream: "stderr", content: "{{ _ipam.stderr | default('') }}" }
+  when:
+  - netbox_seed_evidence_include_command_tails | default(false) | bool
+  - netbox_seed_run_ipam | bool
+
+- name: Write vms tails (host evidence)
+  ansible.builtin.copy:
+    dest: "{{ _netbox_seed_host_evidence_dir }}/vms.{{ item.stream }}.tail.txt"
+    content: "{{ (item.content | default(''))[-8000:] }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+  - { stream: "stdout", content: "{{ _vms.stdout | default('') }}" }
+  - { stream: "stderr", content: "{{ _vms.stderr | default('') }}" }
+  when:
+  - netbox_seed_evidence_include_command_tails | default(false) | bool
+  - netbox_seed_run_vms | bool
+
+- name: Write devices tails (host evidence)
+  ansible.builtin.copy:
+    dest: "{{ _netbox_seed_host_evidence_dir }}/devices.{{ item.stream }}.tail.txt"
+    content: "{{ (item.content | default(''))[-8000:] }}"
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+  - { stream: "stdout", content: "{{ _devices.stdout | default('') }}" }
+  - { stream: "stderr", content: "{{ _devices.stderr | default('') }}" }
+  when:
+  - netbox_seed_evidence_include_command_tails | default(false) | bool
+  - netbox_seed_run_devices | bool
+
+# ---- Repo artifact mirroring (HybridOps convenience). Default OFF for public use. ----
+
+- name: Ensure datasets directory exists (repo artifacts)
+  ansible.builtin.file:
+    path: "{{ _netbox_seed_repo_artifacts_dir }}/datasets"
+    state: directory
+    owner: root
+    group: root
+    mode: "0750"
+  when: netbox_seed_artifacts_enabled | default(false) | bool
+
+- name: Mirror key evidence files to repo artifacts
+  ansible.builtin.copy:
+    src: "{{ item.src }}"
+    dest: "{{ _netbox_seed_repo_artifacts_dir }}/{{ item.dst }}"
+    remote_src: true
+    owner: root
+    group: root
+    mode: "0640"
+  loop:
+  - { src: "{{ _netbox_seed_host_evidence_dir }}/run-summary.txt", dst: "run-summary.txt" }
+  - { src: "{{ _netbox_seed_host_evidence_dir }}/netbox-api-status.redacted.json", dst: "netbox-api-status.redacted.json" }
+  - { src: "{{ _netbox_seed_host_evidence_dir }}/phases.txt", dst: "phases.txt" }
+  when: netbox_seed_artifacts_enabled | default(false) | bool

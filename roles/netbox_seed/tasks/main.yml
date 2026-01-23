@@ -1,0 +1,94 @@
+# purpose: Seed NetBox via helper pipeline on ctrl-01 (export -> ipam -> vms -> devices)
+# adr: ADR-0002
+# maintainer: HybridOps.Studio
+
+- name: Validate inputs and prerequisites
+  ansible.builtin.include_tasks: validate.yml
+
+- name: Stop after smoke-only validation
+  ansible.builtin.meta: end_host
+  when: netbox_seed_smoke_only | bool
+
+- name: Build seed environment
+  ansible.builtin.set_fact:
+    _netbox_seed_env:
+      NETBOX_API_URL: "{{ netbox_api_url }}"
+      NETBOX_API_TOKEN: "{{ netbox_api_token }}"
+  changed_when: false
+  no_log: true
+
+- name: Export infra datasets and inventories (optional)
+  ansible.builtin.command:
+    argv:
+    - python3
+    - control/tools/helper/netbox/export_infra.py
+    - --target
+    - "{{ netbox_seed_target }}"
+  args:
+    chdir: "{{ netbox_seed_repo_root }}"
+  environment: "{{ _netbox_seed_env }}"
+  register: _export
+  changed_when: false
+  when: netbox_seed_run_export | bool
+
+- name: Import IPAM (prefixes, VLANs, pools)
+  ansible.builtin.command:
+    argv:
+    - python3
+    - control/tools/helper/netbox/import_prefixes_to_netbox.py
+  args:
+    chdir: "{{ netbox_seed_repo_root }}"
+  environment: "{{ _netbox_seed_env }}"
+  register: _ipam
+  changed_when: false
+  when: netbox_seed_run_ipam | bool
+
+- name: Import VMs (json first, then csv)
+  ansible.builtin.command:
+    argv:
+    - python3
+    - control/tools/helper/netbox/import_infra_to_netbox.py
+  args:
+    chdir: "{{ netbox_seed_repo_root }}"
+  environment: "{{ _netbox_seed_env }}"
+  register: _vms
+  changed_when: false
+  when: netbox_seed_run_vms | bool
+
+- name: Import devices (manual CSV)
+  ansible.builtin.command:
+    argv:
+    - python3
+    - control/tools/helper/netbox/import_devices_to_netbox.py
+  args:
+    chdir: "{{ netbox_seed_repo_root }}"
+  environment: "{{ _netbox_seed_env }}"
+  register: _devices
+  changed_when: false
+  when: netbox_seed_run_devices | bool
+
+- name: Show phase stderr tail when run with -vv
+  ansible.builtin.debug:
+    msg: |
+      export rc={{ _export.rc | default('n/a') }} stderr_tail={{ (_export.stderr | default(''))[-1200:] }}
+      ipam   rc={{ _ipam.rc   | default('n/a') }} stderr_tail={{ (_ipam.stderr   | default(''))[-1200:] }}
+      vms    rc={{ _vms.rc    | default('n/a') }} stderr_tail={{ (_vms.stderr    | default(''))[-1200:] }}
+      dev    rc={{ _devices.rc| default('n/a') }} stderr_tail={{ (_devices.stderr| default(''))[-1200:] }}
+  when: (ansible_verbosity | default(0)) | int >= 2
+  changed_when: false
+
+- name: Fail if any enabled phase failed
+  ansible.builtin.fail:
+    msg: "NetBox seed phase '{{ item.name }}' failed (rc={{ item.rc }}). See stderr (run with -vv) and evidence outputs."
+  loop:
+  - { name: "export", enabled: "{{ netbox_seed_run_export | bool }}", rc: "{{ _export.rc  | default(0) }}" }
+  - { name: "ipam", enabled: "{{ netbox_seed_run_ipam | bool }}", rc: "{{ _ipam.rc    | default(0) }}" }
+  - { name: "vms", enabled: "{{ netbox_seed_run_vms | bool }}", rc: "{{ _vms.rc     | default(0) }}" }
+  - { name: "devices", enabled: "{{ netbox_seed_run_devices | bool }}", rc: "{{ _devices.rc | default(0) }}" }
+  when:
+  - item.enabled | bool
+  - (item.rc | int) != 0
+
+- name: Evidence
+  ansible.builtin.include_tasks: evidence.yml
+  when: netbox_seed_evidence_enabled | bool

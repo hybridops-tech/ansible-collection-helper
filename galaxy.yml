@@ -1,0 +1,48 @@
+# purpose: Galaxy metadata for hybridops.helper collection
+# adr: ADR-0606-ansible-collections-release-process
+# maintainer: HybridOps.Studio
+
+namespace: hybridops
+name: helper
+version: "0.1.0"
+
+readme: README.md
+description: >
+  Evidence and NetBox helper roles for HybridOps.Studio. Focused on structured artefacts, inventory export and NetBox integration.
+
+authors:
+- HybridOps.Studio
+
+license:
+- MIT-0
+
+tags:
+- hybridops
+- evidence
+- netbox
+- inventory
+- helpers
+- artefacts
+- infrastructure
+- networking
+- eveng
+- virtualization
+- orchestration
+- images
+- audit
+
+homepage: https://docs.hybridops.studio
+documentation: https://docs.hybridops.studio
+repository: https://github.com/hybridops-studio/ansible-collection-helper
+issues: https://github.com/hybridops-studio/ansible-collection-helper/issues
+
+dependencies:
+  hybridops.common: ">=0.1.0"
+
+build_ignore:
+- .git
+- .github
+- .venv
+- dist
+- tests/output
+- __pycache__

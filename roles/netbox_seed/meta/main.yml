@@ -1,0 +1,30 @@
+# purpose: Role metadata for netbox_seed
+# maintainer: HybridOps.Studio
+
+galaxy_info:
+  role_name: netbox_seed
+  author: HybridOps.Studio
+  description: >-
+    Orchestrate NetBox seeding on a control node using the HybridOps.Studio helper pipeline (export -> ipam -> vms -> devices) with optional evidence capture.
+  license: MIT-0
+  min_ansible_version: "2.14"
+
+  platforms:
+  - name: EL
+    versions: [ "9" ]
+  - name: Ubuntu
+    versions: [ "22.04", "24.04" ]
+
+  galaxy_tags:
+  - netbox
+  - ipam
+  - dcim
+  - inventory
+  - automation
+  - terraform
+  - terragrunt
+  - ansible
+  - bootstrap
+  - infrastructure
+
+dependencies: []

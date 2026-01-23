@@ -1,0 +1,17 @@
+# purpose: Remove labs matching exclusion patterns
+# maintainer: HybridOps.Studio
+
+- name: Find labs matching exclude patterns
+  find:
+    paths: "{{ eveng_labs_install_root }}"
+    patterns: "{{ eveng_exclude_patterns }}"
+    recurse: yes
+  register: eveng_labs_excluded
+
+- name: Remove excluded labs
+  file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ eveng_labs_excluded.files }}"
+  when: eveng_labs_excluded.files | length > 0
+  notify: fix lab permissions

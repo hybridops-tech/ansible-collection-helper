@@ -1,0 +1,13 @@
+# purpose: Smoke test for netbox_seed (validation only)
+# adr: ADR-0606-ansible-collections-release-process
+# maintainer: HybridOps.Studio
+
+- name: netbox_seed smoke test
+  hosts: seed_controller
+  become: true
+  vars:
+    netbox_seed_smoke_only: true
+  tasks:
+    - name: Validate seed pipeline prerequisites
+      ansible.builtin.include_role:
+        name: hybridops.helper.netbox_seed

@@ -1,0 +1,49 @@
+# purpose: Defaults for netbox_seed (ctrl-01 orchestration of NetBox seeding helpers)
+# adr: ADR-0002
+# maintainer: HybridOps.Studio
+
+# When true, run validation only and stop. Safe default for CI and first-time use.
+netbox_seed_smoke_only: true
+
+# Repo root on the orchestrator host (where control/tools/helper/netbox lives).
+# Required when netbox_seed_smoke_only=false.
+netbox_seed_repo_root: ""
+
+# Secrets env file on the orchestrator host (KEY=VALUE lines). Not committed.
+# When netbox_seed_repo_root is set, this default becomes valid.
+netbox_seed_secrets_env_path: "{{ netbox_seed_repo_root }}/control/secrets.vault.env"
+
+# If true, require secrets.vault.env to exist even in smoke mode.
+# Public-safe default keeps smoke mode lightweight.
+netbox_seed_require_secrets_env: false
+
+# Export target used by export_infra.py (only used when netbox_seed_run_export=true).
+netbox_seed_target: "onprem-proxmox"
+
+# Phase toggles
+netbox_seed_run_export: true
+netbox_seed_run_ipam: true
+netbox_seed_run_vms: true
+netbox_seed_run_devices: false
+
+# Optional: allow skipping TLS validation for NetBox API calls.
+netbox_seed_validate_tls: false
+
+# Evidence (host-local). Public-safe default: off unless explicitly enabled.
+netbox_seed_evidence_enabled: false
+netbox_seed_evidence_dir: "/var/lib/hybridops/evidence/netbox-seed"
+
+# Evidence verbosity/safety toggles.
+# Command stdout/stderr tails can accidentally capture sensitive context; keep off by default.
+netbox_seed_evidence_include_command_tails: false
+
+# Repo artifacts (writes inside the repo tree). Public-safe default: off.
+# If enabled, role may mirror datasets and summaries under repo_root/output/artifacts/...
+netbox_seed_artifacts_enabled: false
+
+# Optional: override the repo artifacts directory (remote path on ctrl-01).
+# When empty, evidence.yml may compute a default under netbox_seed_repo_root.
+netbox_seed_artifacts_dir: ""
+
+# Include the manual devices CSV in artifacts (off by default).
+netbox_seed_artifacts_include_manual_devices: false

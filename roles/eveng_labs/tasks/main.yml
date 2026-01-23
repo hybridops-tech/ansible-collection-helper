@@ -1,0 +1,63 @@
+# purpose: Orchestrate EVE-NG lab deployment
+# maintainer: HybridOps.Studio
+
+- name: Validate lab source
+  assert:
+    that:
+    - eveng_labs_source is defined
+    - eveng_labs_source in ['local', 'git', 'remote']
+    fail_msg: "eveng_labs_source must be: local, git, or remote"
+
+- name: Create base labs directory
+  file:
+    path: /opt/unetlab/labs
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Create lab folders
+  file:
+    path: "/opt/unetlab/labs/{{ item }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+  loop: "{{ eveng_lab_folders }}"
+  when: eveng_lab_folders is defined and eveng_lab_folders | length > 0
+
+- name: Deploy labs from local path
+  include_tasks: source-local.yml
+  when: eveng_labs_source == 'local'
+
+- name: Deploy labs from Git repository
+  include_tasks: source-git.yml
+  when: eveng_labs_source == 'git'
+
+- name: Deploy labs from remote path
+  include_tasks: source-remote.yml
+  when: eveng_labs_source == 'remote'
+
+- name: Exclude labs by patterns
+  include_tasks: exclude-patterns.yml
+  when:
+  - eveng_exclude_patterns is defined
+  - eveng_exclude_patterns | length > 0
+
+- name: Install labs into target folders
+  include_tasks: install.yml
+
+- name: Set correct ownership
+  file:
+    path: /opt/unetlab/labs
+    owner: www-data
+    group: www-data
+    recurse: yes
+
+- name: Fix lab permissions
+  shell: |
+    find /opt/unetlab/labs -type f -name "*.unl" -exec chmod 664 {} \;
+    find /opt/unetlab/labs -type d -exec chmod 775 {} \;
+  args:
+    executable: /bin/bash
+  changed_when: false

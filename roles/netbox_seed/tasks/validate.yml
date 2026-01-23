@@ -1,0 +1,154 @@
+# purpose: Validate inputs and runtime prerequisites for netbox_seed on ctrl-01
+# adr: ADR-0002
+# maintainer: HybridOps.Studio
+
+- name: Guardrail - repo root required for real runs
+  ansible.builtin.assert:
+    that:
+    - (netbox_seed_repo_root | trim | length) > 0
+    fail_msg: "netbox_seed_repo_root is required when netbox_seed_smoke_only=false."
+  when: not netbox_seed_smoke_only | bool
+
+- name: Validate repo root exists on host
+  ansible.builtin.stat:
+    path: "{{ netbox_seed_repo_root }}"
+  register: _repo
+  changed_when: false
+  when: (netbox_seed_repo_root | trim | length) > 0
+
+- name: Assert repo root exists (real runs)
+  ansible.builtin.assert:
+    that:
+    - _repo.stat.exists | bool
+    - _repo.stat.isdir | bool
+    fail_msg: "netbox_seed_repo_root is not a directory on this host: {{ netbox_seed_repo_root }}"
+  when: not netbox_seed_smoke_only | bool
+
+- name: Require python3
+  ansible.builtin.command: python3 --version
+  register: _py
+  changed_when: false
+
+# Secrets env is required for real runs, optional for smoke runs unless forced.
+- name: Validate secrets env exists on host
+  ansible.builtin.stat:
+    path: "{{ netbox_seed_secrets_env_path }}"
+  register: _secrets_env
+  changed_when: false
+  when:
+  - (not netbox_seed_smoke_only | bool) or (netbox_seed_require_secrets_env | default(false) | bool)
+
+- name: Assert secrets env exists
+  ansible.builtin.assert:
+    that:
+    - _secrets_env.stat.exists | bool
+    - _secrets_env.stat.isreg | bool
+    fail_msg: "Secrets env file not found on host: {{ netbox_seed_secrets_env_path }}"
+  when:
+  - (not netbox_seed_smoke_only | bool) or (netbox_seed_require_secrets_env | default(false) | bool)
+
+- name: Validate helper scripts exist (real runs)
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop:
+  - "{{ netbox_seed_repo_root }}/control/tools/helper/netbox/export_infra.py"
+  - "{{ netbox_seed_repo_root }}/control/tools/helper/netbox/import_prefixes_to_netbox.py"
+  - "{{ netbox_seed_repo_root }}/control/tools/helper/netbox/import_infra_to_netbox.py"
+  - "{{ netbox_seed_repo_root }}/control/tools/helper/netbox/import_devices_to_netbox.py"
+  register: _scripts
+  changed_when: false
+  when: not netbox_seed_smoke_only | bool
+
+- name: Assert required helper scripts exist (real runs)
+  ansible.builtin.assert:
+    that:
+    - (_scripts.results | selectattr('stat.exists', 'equalto', false) | list | length) == 0
+    fail_msg: "One or more helper scripts are missing under control/tools/helper/netbox/."
+  when: not netbox_seed_smoke_only | bool
+
+# Parse secrets.vault.env only when required (real runs) or explicitly requested in smoke runs.
+- name: Read secrets env content
+  ansible.builtin.slurp:
+    src: "{{ netbox_seed_secrets_env_path }}"
+  register: _secrets_raw
+  changed_when: false
+  when:
+  - (not netbox_seed_smoke_only | bool) or (netbox_seed_require_secrets_env | default(false) | bool)
+
+- name: Build secrets env line list
+  ansible.builtin.set_fact:
+    _seed_env_lines: >-
+      {{
+        (_secrets_raw.content | b64decode).splitlines()
+        | map('trim')
+        | reject('match', '^(#|$)')
+        | list
+      }}
+  changed_when: false
+  when:
+  - _secrets_raw is defined
+  - _secrets_raw.content is defined
+
+- name: Initialise parsed env dictionary
+  ansible.builtin.set_fact:
+    _netbox_seed_env: {}
+  changed_when: false
+  when:
+  - _seed_env_lines is defined
+
+- name: Fail on unparseable secrets env lines
+  ansible.builtin.fail:
+    msg: "Unparseable line in {{ netbox_seed_secrets_env_path }}: '{{ item }}'"
+  loop: "{{ _seed_env_lines | default([]) }}"
+  vars:
+    _line: "{{ item | regex_replace('^export\\s+', '') }}"
+  when:
+  - _seed_env_lines is defined
+  - _line is not match('^[A-Za-z_][A-Za-z0-9_]*=.*$')
+
+- name: Parse secrets env into dictionary
+  ansible.builtin.set_fact:
+    _netbox_seed_env: "{{ _netbox_seed_env | combine({ _k: _v }, recursive=False) }}"
+  vars:
+    _line: "{{ item | regex_replace('^export\\s+', '') }}"
+    _k: "{{ (_line | regex_search('^([A-Za-z_][A-Za-z0-9_]*)=', '\\1')) | default('') }}"
+    _v: "{{ (_line | regex_replace('^[A-Za-z_][A-Za-z0-9_]*=', '')) }}"
+  loop: "{{ _seed_env_lines | default([]) }}"
+  when:
+  - _seed_env_lines is defined
+  - _k | length > 0
+  changed_when: false
+
+- name: Validate NETBOX_API_URL present (required for real runs)
+  ansible.builtin.assert:
+    that:
+    - (_netbox_seed_env.NETBOX_API_URL | default('') | trim | length) > 0
+    fail_msg: "NETBOX_API_URL is required in {{ netbox_seed_secrets_env_path }}"
+  when:
+  - (not netbox_seed_smoke_only | bool) or (netbox_seed_require_secrets_env | default(false) | bool)
+
+- name: Validate NETBOX_API_TOKEN present (required for real runs)
+  ansible.builtin.assert:
+    that:
+    - (_netbox_seed_env.NETBOX_API_TOKEN | default('') | trim | length) > 0
+    fail_msg: "NETBOX_API_TOKEN is required in {{ netbox_seed_secrets_env_path }}"
+  when:
+  - (not netbox_seed_smoke_only | bool) or (netbox_seed_require_secrets_env | default(false) | bool)
+
+- name: Set effective NetBox API settings
+  ansible.builtin.set_fact:
+    netbox_api_url: "{{ (_netbox_seed_env.NETBOX_API_URL | trim) | regex_replace('/+$', '') }}"
+    netbox_api_token: "{{ _netbox_seed_env.NETBOX_API_TOKEN | trim }}"
+  changed_when: false
+  when:
+  - (not netbox_seed_smoke_only | bool) or (netbox_seed_require_secrets_env | default(false) | bool)
+
+- name: Preflight - NetBox API reachable and token valid (real runs)
+  ansible.builtin.uri:
+    url: "{{ netbox_api_url }}/api/"
+    headers:
+      Authorization: "Token {{ netbox_api_token }}"
+    validate_certs: "{{ netbox_seed_validate_tls | bool }}"
+    status_code: [ 200 ]
+  changed_when: false
+  when: not netbox_seed_smoke_only | bool

@@ -1,0 +1,145 @@
+# purpose: Build per-run image report and controller logs for EVE-NG images
+# maintainer: HybridOps.Studio
+
+- name: Ensure run timestamp is set
+  set_fact:
+    eveng_images_run_at: "{{ eveng_images_run_at | default(ansible_date_time.iso8601) }}"
+
+- name: Derive run identifier
+  set_fact:
+    eveng_images_run_id: "{{ eveng_images_run_at | regex_replace('[^0-9]', '') }}"
+
+- name: Normalise corrupt files fact
+  set_fact:
+    eveng_images_corrupt_files: "{{ eveng_images_corrupt_files | default([]) }}"
+
+- name: Compute controller output directories and log path
+  set_fact:
+    eveng_images_log_dir_controller: >-
+      {{
+        eveng_images_log_dir_controller
+        | default((playbook_dir | default('.', true)) ~ '/output/logs/eveng-images')
+      }}
+    eveng_images_report_dir_controller: >-
+      {{
+        eveng_images_report_dir_controller
+        | default((playbook_dir | default('.', true)) ~ '/output/artifacts/eveng-images')
+      }}
+    eveng_images_download_log: >-
+      {{
+        eveng_images_download_log
+        | default(eveng_images_log_dir_controller ~ '/downloads-' ~ inventory_hostname ~ '.log')
+      }}
+
+- name: Ensure controller log directory exists
+  delegate_to: localhost
+  become: false
+  run_once: true
+  file:
+    path: "{{ eveng_images_log_dir_controller }}"
+    state: directory
+    mode: '0755'
+
+- name: Ensure controller report directory exists
+  delegate_to: localhost
+  become: false
+  run_once: true
+  file:
+    path: "{{ eveng_images_report_dir_controller }}"
+    state: directory
+    mode: '0755'
+
+- name: Build image report entries
+  set_fact:
+    eveng_images_report_files: >-
+      {{
+        (eveng_images_report_files | default([]))
+        + [
+          {
+            'name': item.path | basename,
+            'path': item.path,
+            'size_bytes': item.size,
+            'type': (
+              eveng_images_list | default([])
+              | selectattr('name', 'defined')
+              | selectattr('name', 'equalto', item.path | basename)
+              | map(attribute='type')
+              | first
+              | default('unknown')
+            ),
+            'source_url': (
+              eveng_images_list | default([])
+              | selectattr('name', 'defined')
+              | selectattr('name', 'equalto', item.path | basename)
+              | map(attribute='url')
+              | first
+              | default('')
+            ),
+            'status': (
+              'corrupt'
+              if item.path in (eveng_images_corrupt_files | default([]))
+              else 'ok'
+            )
+          }
+        ]
+      }}
+  loop: "{{ eveng_downloaded_files | default([]) }}"
+  when: eveng_downloaded_files is defined
+
+- name: Normalise report files list
+  set_fact:
+    eveng_images_report_files: "{{ eveng_images_report_files | default([]) }}"
+
+- name: Build report document
+  set_fact:
+    eveng_images_report_document:
+      run_at: "{{ eveng_images_run_at }}"
+      host: "{{ inventory_hostname }}"
+      cache_dir: "{{ eveng_images_cache_dir }}"
+      files: "{{ eveng_images_report_files }}"
+
+- name: Compute report file paths
+  set_fact:
+    eveng_images_report_run_path: >-
+      {{ eveng_images_report_dir_controller }}/report-{{ inventory_hostname }}-{{ eveng_images_run_id }}.yml
+    eveng_images_report_latest_host_path: >-
+      {{ eveng_images_report_dir_controller }}/report-{{ inventory_hostname }}.yml
+    eveng_images_report_latest_link_path: >-
+      {{ eveng_images_report_dir_controller }}/latest.yml
+
+- name: Write per-run report on controller
+  delegate_to: localhost
+  become: false
+  copy:
+    dest: "{{ eveng_images_report_run_path }}"
+    mode: '0644'
+    content: "{{ eveng_images_report_document | to_nice_yaml }}"
+
+- name: Write latest host report on controller
+  delegate_to: localhost
+  become: false
+  copy:
+    dest: "{{ eveng_images_report_latest_host_path }}"
+    mode: '0644'
+    content: "{{ eveng_images_report_document | to_nice_yaml }}"
+
+- name: Point latest.yml symlink at latest host report
+  delegate_to: localhost
+  become: false
+  file:
+    state: link
+    src: "{{ eveng_images_report_latest_host_path }}"
+    dest: "{{ eveng_images_report_latest_link_path }}"
+    force: true
+
+- name: Append summary line to controller log
+  delegate_to: localhost
+  become: false
+  lineinfile:
+    path: "{{ eveng_images_download_log }}"
+    create: true
+    mode: '0644'
+    insertafter: EOF
+    line: >-
+      {{ eveng_images_run_at }} [{{ inventory_hostname }}] images={{ eveng_images_report_files | length }} corrupt={{ eveng_images_report_files | selectattr('status', 'equalto', 'corrupt') | list | length }} cache={{ eveng_images_cache_dir }} files={{ eveng_images_report_files | map(attribute='name') | join(',') }} corrupt_files={{ eveng_images_report_files | selectattr('status', 'equalto', 'corrupt') | map(attribute='name') | join(',') }}
+  when: eveng_images_logging_enabled | default(true) | bool

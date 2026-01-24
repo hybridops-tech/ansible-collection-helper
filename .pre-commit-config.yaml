@@ -1,16 +1,17 @@
-# purpose: Pre-commit hooks for HybridOps.* Ansible collection
+# purpose: Pre-commit hooks for HybridOps Ansible collections.
 # adr: ADR-0606-ansible-collections-release-process
 # maintainer: HybridOps.Studio
 
 exclude: >
   ^(
-    .*/\.private_gists/|
-    .*/\.bak/|
-    .*/\.tox/|
-    .*/\.venv/|
-    .*/tests/output/|
-    .*/build/|
-    .*/dist/|
+    \.private_gists/|
+    \.bak/|
+    \.tox/|
+    \.venv/|
+    tests/output/|
+    output/|
+    build/|
+    dist/|
     .*\.zip$
   )
 

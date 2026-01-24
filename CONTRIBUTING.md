@@ -1,103 +1,83 @@
 # Contributing to `hybridops.helper`
 
-`hybridops.helper` focuses on **evidence collection** and **NetBox integration**.  
-It exists to make automation runs explainable and auditable, not to implement business logic.
+`hybridops.helper` provides evidence collection and NetBox integration helpers. The scope is operational traceability and audit-friendly outputs, not platform-specific business logic.
 
-Typical roles include:
+Design and release context is maintained in the HybridOps.Studio documentation site.
 
-- `helper_evidence_collector` – structure logs, configs, and artefacts under `output/`.
-- `helper_netbox_inventory` – export and synchronise inventory data with NetBox.
+## Contribution scope
 
-Helpers should be reusable both inside HybridOps.Studio and in other environments.
+Appropriate changes include:
 
----
+- Evidence layout improvements (structure, labelling, metadata, retention behaviour).
+- Generic NetBox integration helpers (inventory export, synchronisation, diagnostics).
+- Error handling and actionable diagnostics for misconfiguration and API failures.
+- Documentation updates for CI, drills, and runbooks.
 
-## 1. Contribution scope
+Avoid platform-specific business logic in this collection; prefer `hybridops.app` or `hybridops.network` when behaviour is domain-specific.
 
-Good fits for this collection:
+## Development workflow
 
-- Enhancements to evidence layout, labelling, or metadata.
-- Additional NetBox integration helpers that remain generic and reusable.
-- Improvements to error handling and diagnostics when NetBox or evidence paths are misconfigured.
-- Documentation updates that clarify how to use helpers in CI, drills, and runbooks.
+### Local setup
 
-Avoid embedding **platform-specific business logic** here. That belongs in `hybridops.app` or `hybridops.network`.
+Use versions compatible with `requirements.txt`:
 
----
+```bash
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+```
 
-## 2. Development workflow
+### Change guidelines
 
-1. **Fork and branch**
+- Keep interfaces stable where practical (inputs and output layout under `output/`).
+- Fail with clear, actionable error messages.
+- Treat evidence paths as an API surface; document path changes and include migration notes in `CHANGELOG.md` when required.
 
-   - Fork the repository.
-   - Create a topic branch: `feature/<short-description>` or `fix/<short-description>`.
+### Tests
 
-2. **Local setup**
+Role-local smoke tests:
 
-   - Install dependencies from `requirements.txt` into a virtualenv:
+```bash
+cd roles/<role_name>
+ansible-playbook -i tests/inventory.example.ini tests/smoke.yml
+```
 
-     ```bash
-     python3 -m venv .venv
-     . .venv/bin/activate
-     pip install -r requirements.txt
-     ```
+NetBox-related changes should be validated against a lab NetBox instance and reflected in the smoke harness and example inventory.
 
-3. **Make your change**
+Platform integration (via the harness):
 
-   - Keep interfaces stable where possible:
-     - Input variables.
-     - Output directory layout under `output/`.
-   - Ensure helpers fail with clear, actionable error messages.
-   - Preserve the evidence-first mindset: outputs should be easy to link from ADRs, HOWTOs, and runbooks.
+```bash
+# In galaxy-collections-harness
+make workspace.clone
+make collections.sync
+make venv.refresh
+make test ROLE=<role_name>
+```
 
-4. **Run tests**
+### Pull requests
 
-   - Role-local smoke tests:
+Include:
 
-     ```bash
-     cd ansible_collections/hybridops/helper/roles/<role_name>
-     ansible-playbook -i tests/inventory.example.ini tests/smoke.yml
-     ```
+- Summary of changes and expected impact (evidence layout and/or NetBox behaviour).
+- Test evidence (smoke and/or platform integration).
+- NetBox test details where applicable (version and assumptions).
 
-   - If you add or change NetBox integration behaviour:
-     - Test against a lab NetBox instance.
-     - Update `tests/smoke.yml` and example inventory to reflect the expected configuration.
+## Evidence and NetBox expectations
 
-   - From the shared `ansible-galaxy-hybridops` workspace (integration with the wider platform), relevant roles can also be exercised via:
+Evidence helpers should:
 
-     ```bash
-     make venv.refresh
-     make test ROLE=helper_evidence_collector
-     ```
+- Write artefacts under predictable, documented roots (for example `output/artifacts/...`).
+- Avoid overwriting evidence unless explicitly configured.
+- Avoid emitting secrets or sensitive values into evidence output.
 
-5. **Open a pull request**
-
-   - Describe what changed and how it affects evidence layout or NetBox behaviour.
-   - Include details of the test environment (for example NetBox version, lab details, and any assumptions).
-
----
-
-## 3. Evidence and NetBox expectations
-
-Evidence-related roles should:
-
-- Write artefacts under a clearly named root (for example `output/artifacts/...`).
-- Avoid overwriting existing evidence unless explicitly configured to do so.
-- Use predictable, documented paths so documentation can link to them.
-
-NetBox-related roles should:
+NetBox helpers should:
 
 - Treat API and connectivity errors as first-class signals with clear messages.
-- Avoid hard-coding site, tenant, or environment names beyond what is documented in variables.
-- Keep NetBox models and assumptions documented in role-level READMEs.
+- Avoid hard-coded site, tenant, or environment names beyond documented variables.
+- Document model assumptions in role-level README content where relevant.
 
----
+## Security and secrets
 
-## 4. Style and quality
-
-- Keep comments brief and focused on non-obvious intent.
-- Avoid logging secrets, tokens, or sensitive values into evidence output.
-- Use variables for anything environment-specific (URLs, tokens, paths).
-- Follow the versions and tools in `requirements.txt` for linting and testing (for example `ansible-lint`, `pre-commit` if configured).
-
-By contributing here, you help strengthen the **evidence story** around automation runs, making it easier to prove what happened and why in both HybridOps.Studio and external environments.
+- Do not commit secrets, tokens, client IDs, or passwords.
+- Consume sensitive values via variables, Vault, or environment lookups.
+- Avoid logging sensitive values into task output and evidence artefacts.

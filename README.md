@@ -1,69 +1,47 @@
-# hybridops.helper – Evidence and NetBox Helper Roles
+# `hybridops.helper`
 
-Helper roles for evidence collection and NetBox integration.  
-This collection focuses on making automation runs explainable and auditable by
-producing structured artefacts and maintaining inventory alignment with NetBox.
+Helper roles for evidence collection and NetBox integration. The collection focuses on audit-friendly outputs and inventory alignment, with role-level behaviour documented in each role’s `README.md`.
 
----
+High-level platform context is maintained at [docs.hybridops.studio](https://docs.hybridops.studio).
 
-## 1. Collection scope
+## Scope
 
-**Collection name:** `hybridops.helper`  
-**Galaxy namespace/name:** `hybridops.helper` (planned)  
-**Source repository:** [github.com/hybridops-studio/ansible-collection-helper](https://github.com/hybridops-studio/ansible-collection-helper)
+- Evidence helpers that produce predictable artefacts under `output/` roots (for example `output/artifacts/...`).
+- NetBox helpers for inventory export and synchronisation using the NetBox API.
+- Generic behaviour suitable for HybridOps.Studio and other environments.
 
-The collection currently provides roles that:
+## Roles
 
-- Capture logs, configuration, and artefacts from a playbook run into a
-  structured output tree.
-- Export or synchronise inventory information with NetBox.
+| Role | Purpose |
+|------|---------|
+| `helper_evidence_collector` | Collect logs and configuration into an artefact tree under `output/`. |
+| `helper_netbox_inventory` | Export or synchronise inventory data with NetBox APIs. |
 
-Higher-level playbooks in HybridOps.Studio use these roles to keep a consistent
-evidence story across network, platform, and application automation.
+## Requirements
 
----
+- Ansible `ansible-core` 2.15+.
+- Python 3.10+ on the control node.
+- NetBox integration requires a reachable NetBox instance and an API token provided via variables, Vault, or environment lookup.
 
-## 2. Roles
+## Installation
 
-| Role name                   | Purpose                                                              |
-|-----------------------------|----------------------------------------------------------------------|
-| `helper_evidence_collector` | Collect logs and configuration into `output/artifacts/...`.         |
-| `helper_netbox_inventory`   | Export or synchronise inventory data with NetBox APIs.              |
-
-Additional helper roles may be added over time, but the collection remains
-glue-focused and intentionally small.
-
----
-
-## 3. Requirements
-
-- Ansible **2.15+**.  
-- Python **3.10+** on the control node.  
-- For NetBox integration:
-  - A reachable NetBox instance.
-  - API token supplied via inventory variables, environment, or vault.
-
----
-
-## 4. Installation
+Install from Ansible Galaxy:
 
 ```bash
 ansible-galaxy collection install hybridops.helper
 ```
 
-In `collections/requirements.yml`:
+Pin in `collections/requirements.yml`:
 
 ```yaml
 collections:
   - name: hybridops.helper
-    version: "*"
+    version: ">=0.1.0"
 ```
 
----
+## Usage
 
-## 5. Example usage
-
-### 5.1 Wrap a network backup with evidence collection
+### Wrap a playbook run with evidence collection
 
 ```yaml
 - name: Nightly device backups with evidence
@@ -89,7 +67,7 @@ collections:
     - role: hybridops.network.device_backup
 ```
 
-### 5.2 Synchronise inventory to NetBox
+### Synchronise inventory to NetBox
 
 ```yaml
 - name: Push inventory into NetBox
@@ -106,82 +84,16 @@ collections:
     - role: hybridops.helper.helper_netbox_inventory
 ```
 
----
+## Testing
 
-## 6. Relationship to HybridOps.Studio
+- Role-local smoke tests are provided under `roles/<role>/tests/` and exercised against a lab inventory.
+- Molecule scenarios may be provided where isolated validation is valuable (for example NetBox integration against a test instance).
+- Platform integration tests are executed via HybridOps.Studio pipelines and lab inventories.
 
-In the main HybridOps.Studio repository, this collection is used to:
+## License
 
-- Attach structured evidence to automation runs for ADRs and briefings.  
-- Support lab scenarios where operators run Ansible and review artefacts under
-  `output/`.
+- Code: [MIT-0](https://spdx.org/licenses/MIT-0.html)  
+- Documentation & diagrams: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
 
-The intent is that SDN rollouts, RKE2 bootstrap flows, DR drills, and similar
-scenarios emit consistent evidence without duplicating logging logic in each
-playbook.
-
----
-
-## 7. Testing and CI
-
-Helper roles in this collection are validated through:
-
-- **Self-contained tests** under `tests/` (for example `tests/inventory.example.ini` and `tests/smoke.yml`) to exercise evidence and NetBox flows in isolation.
-- **Molecule scenarios** under `molecule/default/` where richer validation is useful (for example, when interacting with a NetBox test instance).
-- **Platform integration tests** in the HybridOps.Studio platform repository, where playbooks under `deployment/` and CI pipelines use `hybridops.helper` to attach evidence and maintain inventory alignment.
-
-A repository-level `Makefile` provides a thin wrapper around Molecule:
-
-- `make test` runs `molecule test` for all roles that have a `molecule/default/` scenario.
-- `make test ROLE=helper_evidence_collector` runs `molecule test` for a single role.
-
-This keeps helper roles small and focused while ensuring they behave correctly in end-to-end platform and CI runs.
-
----
-
-## 8. Development and contributions
-
-Layout (simplified):
-
-```text
-ansible_collections/hybridops/helper/
-├── roles/
-│   ├── helper_evidence_collector/
-│   └── helper_netbox_inventory/
-└── README.md
-```
-
-Guidelines for new helper roles:
-
-- Keep roles focused and composable.  
-- Avoid embedding platform-specific business logic; such logic belongs in
-  `hybridops.app` or `hybridops.network`.  
-- Ensure outputs land under a predictable `output/` structure that aligns with
-  the wider evidence model documented in the main repository.
-- Add tests under the role’s `tests/` directory or in consuming repositories
-  for any non-trivial behaviour.
-
-Release workflow matches other HybridOps collections: update `galaxy.yml`,
-tag the repository, then build and publish to Galaxy.
-
----
-
-## 9. Releases
-
-This collection is versioned with Semantic Versioning and published to Ansible Galaxy as `hybridops.helper`.
-
-Contribution guidelines are documented in `CONTRIBUTING.md` in this repository.
-
-For maintainers, the end-to-end release workflow (versioning, changelog updates, build, publish and evidence capture) follows the standard HybridOps.Studio collections process described in ADR-0606:
-
-- [ADR-0606 – Ansible collections release process](https://docs.hybridops.studio/adr/ADR-0606-ansible-collections-release-process/)
-
----
-
-## 10. Licence
-
-- Code in this collection: **MIT-0**.  
-- Documentation in this repository: **CC BY 4.0**.
-
-Project-wide licensing details are documented in the main HybridOps.Studio
-repository.
+See the [HybridOps.Studio licensing overview](https://docs.hybridops.studio/briefings/legal/licensing/)
+for project-wide licence details, including branding and trademark notes.

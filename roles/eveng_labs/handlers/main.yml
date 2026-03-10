@@ -1,5 +1,5 @@
 # purpose: Normalise lab permissions for EVE-NG
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: fix lab permissions
   shell: |

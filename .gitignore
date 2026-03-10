@@ -16,6 +16,7 @@ build/
 .molecule/
 .cache/
 tests/output/
+tests/outputs/
 output/
 
 # Editor / OS noise
@@ -28,3 +29,7 @@ Thumbs.db
 *.log
 *.tmp
 *.swp
+
+*output/
+*outputs/
+plugins/

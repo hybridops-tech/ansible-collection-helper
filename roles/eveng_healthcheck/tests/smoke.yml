@@ -1,7 +1,7 @@
 ---
 - name: Test eveng_healthcheck role
   hosts: cicd_test
-  become: yes # Required - EVE-NG healthcheck may need root privileges
+  become: true  # Required - EVE-NG healthcheck may need root privileges
 
   vars:
     # Test level: basic, images, or full
@@ -15,4 +15,4 @@
     health_check_fail_on_warning: false
 
   roles:
-  - hybridops.helper.eveng_healthcheck
+    - role: hybridops.helper.eveng_healthcheck

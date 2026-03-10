@@ -1,85 +1,88 @@
+---
 # purpose: Download EVE-NG image archives from URL sources into a local cache
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Show planned image downloads
-  debug:
+  ansible.builtin.debug:
     msg: >-
-      Downloading {{ eveng_images_list | length }} image(s) into {{ eveng_images_cache_dir }}: {{ eveng_images_list | map(attribute='name') | list }}
+      Downloading {{ eveng_images_list | length }} image(s) into {{ eveng_images_cache_dir }}:
+      {{ eveng_images_list | map(attribute='name') | list }}
   when: eveng_images_list is defined
 
 - name: Validate image list is defined
-  assert:
+  ansible.builtin.assert:
     that:
-    - eveng_images_list is defined
-    - eveng_images_list | length > 0
+      - eveng_images_list is defined
+      - (eveng_images_list | length) > 0
     fail_msg: "eveng_images_list must be defined with at least one image."
 
 - name: Validate image entries
-  assert:
+  ansible.builtin.assert:
     that:
-    - item.url is defined
-    - item.type is defined
-    - item.type in ['iol', 'qemu', 'dynamips']
-    fail_msg: "Each image must have 'url' and 'type' (iol, qemu, or dynamips). 'name' is optional."
+      - item.url is defined
+      - item.type is defined
+      - item.type in ['iol', 'qemu', 'dynamips']
+    fail_msg: >-
+      Each image must have 'url' and 'type' (iol, qemu, or dynamips). 'name' is optional.
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"
 
 - name: Capture download run timestamp
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_run_at: "{{ ansible_date_time.iso8601 }}"
 
 - name: Ensure download cache directory exists
-  file:
+  ansible.builtin.file:
     path: "{{ eveng_images_cache_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Detect whether MEGA downloads are required
-  set_fact:
+  ansible.builtin.set_fact:
     has_mega_downloads: >-
-      {{ eveng_images_list | selectattr('url', 'search', 'mega.nz') | list | length > 0 }}
+      {{ (eveng_images_list | selectattr('url', 'search', 'mega.nz') | list | length) > 0 }}
 
 - name: Install MEGAcmd for MEGA downloads
-  block:
-  - name: Check if MEGAcmd is installed
-    command: which mega-get
-    register: megacmd_check
-    failed_when: false
-    changed_when: false
-
-  - name: Install gdebi
-    apt:
-      name: gdebi-core
-      state: present
-      update_cache: yes
-    when: megacmd_check.rc != 0
-
-  - name: Download MEGAcmd package
-    get_url:
-      url: "https://mega.nz/linux/repo/xUbuntu_22.04/amd64/megacmd-xUbuntu_22.04_amd64.deb"
-      dest: "/tmp/megacmd.deb"
-      mode: '0644'
-    when: megacmd_check.rc != 0
-
-  - name: Install MEGAcmd
-    command: gdebi -n /tmp/megacmd.deb
-    when: megacmd_check.rc != 0
-
-  - name: Remove MEGAcmd package
-    file:
-      path: "/tmp/megacmd.deb"
-      state: absent
-    when: megacmd_check.rc != 0
-
-  - name: Wait for MEGAcmd initialisation
-    pause:
-      seconds: 3
-    when: megacmd_check.rc != 0
   when: has_mega_downloads | bool
+  block:
+    - name: Check if MEGAcmd is installed
+      ansible.builtin.command: command -v mega-get
+      register: megacmd_check
+      failed_when: false
+      changed_when: false
+
+    - name: Install gdebi
+      ansible.builtin.apt:
+        name: gdebi-core
+        state: present
+        update_cache: true
+      when: megacmd_check.rc != 0
+
+    - name: Download MEGAcmd package
+      ansible.builtin.get_url:
+        url: "https://mega.nz/linux/repo/xUbuntu_22.04/amd64/megacmd-xUbuntu_22.04_amd64.deb"
+        dest: "/tmp/megacmd.deb"
+        mode: "0644"
+      when: megacmd_check.rc != 0
+
+    - name: Install MEGAcmd
+      ansible.builtin.command: gdebi -n /tmp/megacmd.deb
+      when: megacmd_check.rc != 0
+
+    - name: Remove MEGAcmd package
+      ansible.builtin.file:
+        path: "/tmp/megacmd.deb"
+        state: absent
+      when: megacmd_check.rc != 0
+
+    - name: Wait for MEGAcmd initialisation
+      ansible.builtin.pause:
+        seconds: 3
+      when: megacmd_check.rc != 0
 
 - name: Download from MEGA URLs
-  shell: |
+  ansible.builtin.shell: |
     set -e
     set -o pipefail
 
@@ -115,7 +118,12 @@
 
     sleep 2
 
-    DOWNLOADED="$(find . -type f \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' -o -name '*.gz' \) -newer "$MARKER" | sort -r | head -1 || true)"
+    DOWNLOADED="$(
+      find . -type f \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' -o -name '*.gz' \) \
+        -newer "$MARKER" \
+        | sort -r \
+        | head -1 || true
+    )"
 
     if [ -z "$DOWNLOADED" ]; then
       DOWNLOADED="$(ls -1t *.tar.gz *.tgz *.zip *.gz 2>/dev/null | head -1 || true)"
@@ -147,10 +155,10 @@
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"
-  when: "'mega.nz' in item.url"
+  when: "'mega.nz' in (item.url | default(''))"
 
 - name: Download from non-MEGA URLs
-  shell: |
+  ansible.builtin.shell: |
     set -e
     set -o pipefail
 
@@ -191,31 +199,31 @@
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"
-  when: "'mega.nz' not in item.url"
+  when: "'mega.nz' not in (item.url | default(''))"
 
 - name: Discover downloaded files
-  find:
+  ansible.builtin.find:
     paths: "{{ eveng_images_cache_dir }}"
     patterns:
-    - "*.tar.gz"
-    - "*.tgz"
-    - "*.zip"
-    - "*.gz"
-    - "*.qcow2"
-    - "*.img"
-    - "*.bin"
-    recurse: no
+      - "*.tar.gz"
+      - "*.tgz"
+      - "*.zip"
+      - "*.gz"
+      - "*.qcow2"
+      - "*.img"
+      - "*.bin"
+    recurse: false
   register: downloaded_files
 
 - name: Fail when no files were downloaded
-  fail:
+  ansible.builtin.fail:
     msg: "No image files found in {{ eveng_images_cache_dir }}"
-  when: downloaded_files.files | length == 0
+  when: (downloaded_files.files | default([]) | length) == 0
 
 - name: Record download metadata
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_downloaded_files: "{{ downloaded_files.files }}"
 
 - name: Build image report and export logs
-  include_tasks: report.yml
-  when: eveng_images_generate_report | default(true)
+  ansible.builtin.include_tasks: report.yml
+  when: eveng_images_generate_report | default(true) | bool

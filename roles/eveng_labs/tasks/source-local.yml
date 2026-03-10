@@ -1,5 +1,5 @@
 # purpose: Stage labs from controller filesystem
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Check local path exists on controller
   stat:

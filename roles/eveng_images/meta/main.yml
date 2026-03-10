@@ -7,22 +7,22 @@ galaxy_info:
   min_ansible_version: "2.10"
 
   platforms:
-  - name: Ubuntu
-    versions:
-    - focal
-    - jammy
-  - name: Debian
-    versions:
-    - bullseye
-    - bookworm
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
+    - name: Debian
+      versions:
+        - bullseye
+        - bookworm
 
   galaxy_tags:
-  - networking
-  - eveng
-  - eve-ng
-  - cisco
-  - network-automation
-  - images
-  - deployment
+    - networking
+    - eveng
+    - eve-ng
+    - cisco
+    - network-automation
+    - images
+    - deployment
 
 dependencies: []

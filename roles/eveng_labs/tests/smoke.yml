@@ -1,5 +1,6 @@
+---
 # purpose: Smoke test eveng_labs role
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Smoke test EVE-NG labs deployment
   hosts: cicd_test
@@ -11,7 +12,8 @@
     eveng_labs_local_path: "{{ playbook_dir }}/file/eveng_lab_sample.zip"
 
     eveng_lab_folders:
-    - SmokeTest
+      - SmokeTest
+
     # Alternative Git source example
     # eveng_labs_source: git
     # eveng_labs_git_repo: "git@github.com:example/eveng-labs.git"
@@ -23,17 +25,18 @@
     # eveng_labs_remote_path: /data/eveng/labs
 
   tasks:
-  - name: Deploy labs
-    include_role:
-      name: hybridops.helper.eveng_labs
+    - name: Deploy labs
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_labs
 
-  - name: Verify SmokeTest lab directory exists
-    stat:
-      path: /opt/unetlab/labs/SmokeTest
-    register: test_folder
+    - name: Verify SmokeTest lab directory exists
+      ansible.builtin.stat:
+        path: /opt/unetlab/labs/SmokeTest
+      register: test_folder
+      changed_when: false
 
-  - name: Assert SmokeTest directory present
-    assert:
-      that:
-      - test_folder.stat.exists
-      fail_msg: "SmokeTest lab directory not found under /opt/unetlab/labs"
+    - name: Assert SmokeTest directory present
+      ansible.builtin.assert:
+        that:
+          - test_folder.stat.exists | default(false) | bool
+        fail_msg: "SmokeTest lab directory not found under /opt/unetlab/labs"

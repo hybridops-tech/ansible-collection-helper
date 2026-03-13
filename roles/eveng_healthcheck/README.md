@@ -115,7 +115,7 @@ Typical use cases: scheduled audits, detailed troubleshooting, pre-change verifi
   become: yes
 
   roles:
-    - hybridops.app.eveng_healthcheck
+    - hybridops.helper.eveng_healthcheck
 ```
 
 ### Full System Audit
@@ -132,7 +132,7 @@ Typical use cases: scheduled audits, detailed troubleshooting, pre-change verifi
     health_check_fail_on_warning: true
 
   roles:
-    - hybridops.app.eveng_healthcheck
+    - hybridops.helper.eveng_healthcheck
 ```
 
 ### Image Verification
@@ -148,7 +148,7 @@ Typical use cases: scheduled audits, detailed troubleshooting, pre-change verifi
     health_check_report_format: detailed
 
   roles:
-    - hybridops.app.eveng_healthcheck
+    - hybridops.helper.eveng_healthcheck
 ```
 
 ### Custom Component Selection
@@ -165,7 +165,7 @@ Typical use cases: scheduled audits, detailed troubleshooting, pre-change verifi
     health_check_api: false    # Skip API checks
 
   roles:
-    - hybridops.app.eveng_healthcheck
+    - hybridops.helper.eveng_healthcheck
 ```
 
 ### JSON Export for Monitoring
@@ -181,7 +181,7 @@ Typical use cases: scheduled audits, detailed troubleshooting, pre-change verifi
     health_check_report_format: json
 
   roles:
-    - hybridops.app.eveng_healthcheck
+    - hybridops.helper.eveng_healthcheck
 
   post_tasks:
     - name: Save health report
@@ -439,7 +439,7 @@ ansible-playbook healthcheck.yml -e health_check_level=basic
         eveng_resource_profile: performance
 
     - name: Verify installation
-      role: hybridops.app.eveng_healthcheck
+      role: hybridops.helper.eveng_healthcheck
       vars:
         health_check_level: full
         health_check_fail_on_warning: true
@@ -458,7 +458,7 @@ ansible-playbook healthcheck.yml -e health_check_level=basic
     health_check_report_format: json
 
   roles:
-    - hybridops.app.eveng_healthcheck
+    - hybridops.helper.eveng_healthcheck
 
   post_tasks:
     - name: Archive health report
@@ -482,12 +482,12 @@ ansible-playbook healthcheck.yml -e health_check_level=basic
   hosts: eveng_staging
   become: yes
 
-  vars: 
+  vars:
     health_check_level: images
     health_check_fail_on_warning: true
 
   roles:
-    - hybridops.app.eveng_healthcheck
+    - hybridops.helper.eveng_healthcheck
 ```
 
 ## Best Practices
@@ -500,13 +500,13 @@ ansible-playbook healthcheck.yml -e health_check_level=basic
 
 ## Documentation
 
-Further context is provided in the broader HybridOps.Studio documentation set, including platform documentation, evidence and outputs overview, and licensing overview.
+Further context is provided in the broader HybridOps.Tech documentation set, including platform runbooks, lifecycle guidance, and licensing information.
 
 ## License
 
 MIT.
 
-See the [HybridOps.Studio licensing overview](https://docs.hybridops.studio/briefings/legal/licensing/)
+See the [HybridOps.Tech licensing overview](https://docs.hybridops.tech/briefings/legal/licensing/)
 for project-wide licence details, including branding and trademark notes.
 
 ## Author

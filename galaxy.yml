@@ -1,48 +1,53 @@
+---
 # purpose: Ansible Galaxy metadata for hybridops.helper collection
 # adr: ADR-0606-ansible-collections-release-process
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 namespace: hybridops
 name: helper
-version: 0.1.0
+version: "0.1.1"
 
 readme: README.md
-description: >
-  Evidence and NetBox helper roles for HybridOps.Studio, focused on structured artefacts, inventory export, and NetBox integration.
+description: >-
+  Helper roles for HybridOps, focused on EVE-NG content handling, inventory
+  export, NetBox integration, and reusable operational checks.
 
 authors:
-- HybridOps.Studio
+  - HybridOps.Tech
 
 license:
-- MIT-0
-
-min_ansible_version: "2.15"
+  - MIT-0
 
 tags:
-- hybridops
-- evidence
-- netbox
-- inventory
-- automation
-- audit
+  - hybridops
+  - netbox
+  - inventory
+  - automation
+  - audit
+  - eveng
+  - tools
 
-homepage: https://docs.hybridops.studio
-documentation: https://docs.hybridops.studio
-repository: https://github.com/hybridops-studio/ansible-collection-helper
-issues: https://github.com/hybridops-studio/ansible-collection-helper/issues
+homepage: https://hybridops.tech
+documentation: https://docs.hybridops.tech
+repository: https://github.com/hybridops-tech/ansible-collection-helper
+issues: https://github.com/hybridops-tech/ansible-collection-helper/issues
 
 dependencies:
   hybridops.common: ">=0.1.0"
 
 build_ignore:
-- .git
-- .github
-- .tox
-- .venv
-- build
-- dist
-- output
-- tests/output
-- __pycache__
-- .mypy_cache
-- .pytest_cache
+  - .git
+  - .github
+  - .ansible
+  - .tox
+  - .venv
+  - build
+  - dist
+  - output
+  - tests/output
+  - tests/outputs
+  - roles/eveng_images/tests/output
+  - roles/eveng_healthcheck/tests/outputs
+  - __pycache__
+  - .mypy_cache
+  - .pytest_cache

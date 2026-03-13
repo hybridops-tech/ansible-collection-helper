@@ -2,7 +2,7 @@
 
 **Purpose:** Deploy and maintain EVE-NG lab files under `/opt/unetlab/labs` from controller, Git, or remote sources.  
 **Design reference:** ADR-XXXX (EVE-NG lab content management)  
-**Maintainer:** HybridOps.Studio
+**Maintainer:** HybridOps.Tech
 
 ---
 
@@ -15,7 +15,7 @@ The role:
 - Applies a shared rsync exclude set to keep lab trees clean.
 - Normalises ownership and permissions after each run.
 
-Typical usage includes rebuilding lab libraries on EVE-NG hosts for homelab, CI, or training environments.
+Typical usage includes rebuilding lab libraries on EVE-NG hosts for lab, CI, or training environments.
 
 ---
 
@@ -194,5 +194,5 @@ This role stays focused on synchronisation and permissions; higher-level test lo
 
 ## License
 
-See the [HybridOps.Studio licensing overview](https://docs.hybridops.studio/briefings/legal/licensing/)
+See the [HybridOps.Tech licensing overview](https://docs.hybridops.tech/briefings/legal/licensing/)
 for project-wide licence details, including branding and trademark notes.

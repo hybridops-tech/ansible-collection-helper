@@ -1,8 +1,8 @@
 # eveng_images
 
-**Purpose:** Standardised deployment and maintenance of EVE-NG image files (archives and raw images) for lab environments.  
-**Design reference:** ADR-XXXX (EVE-NG image management and evidence model)  
-**Maintainer:** HybridOps.Studio
+**Purpose:** Standardized deployment and maintenance of EVE-NG image files (archives and raw images) for lab environments.  
+**Design reference:** ADR-XXXX (EVE-NG image management and verification model)  
+**Maintainer:** HybridOps.Tech
 
 ---
 
@@ -16,9 +16,9 @@ The role:
   - `remote` – remote file server accessed over SSH/rsync
 - Caches content on the EVE-NG host.
 - Installs images into `/opt/unetlab/addons/*` with predictable layouts.
-- Emits logs and reports suitable for evidence, CI, and troubleshooting.
+- Emits logs and reports suitable for verification, CI, and troubleshooting.
 
-Typical usage includes ad-hoc lab builds, CI smoke tests, and platform evidence runs where image state and provenance require documentation.
+Typical usage includes ad-hoc lab builds, CI smoke tests, and governed platform runs where image state and provenance require documentation.
 
 ---
 
@@ -157,28 +157,28 @@ Corrupt archives are always included in the debug summary and in the report docu
 
 ## 5. Logging and reports
 
-The role aligns with the HybridOps.Studio evidence layout:
+The role aligns with the HybridOps.Tech reporting layout:
 
-- Logs under `output/logs/…`.
-- Reports under `output/artifacts/…`.
+- Logs under `var/log/hybridops/eveng-images/…`.
+- Reports under `var/lib/hybridops/reports/eveng-images/…`.
 
 Controller defaults:
 
 ```yaml
 eveng_images_logging_enabled: true
 
-eveng_images_log_dir_controller: "{{ playbook_dir | default('.', true) }}/output/logs/eveng-images"
+eveng_images_log_dir_controller: "{{ playbook_dir | default('.', true) }}/var/log/hybridops/eveng-images"
 eveng_images_download_log: "{{ eveng_images_log_dir_controller }}/downloads-{{ inventory_hostname }}.log"
 
 eveng_images_generate_report: true
-eveng_images_report_dir_controller: "{{ playbook_dir | default('.', true) }}/output/artifacts/eveng-images"
+eveng_images_report_dir_controller: "{{ playbook_dir | default('.', true) }}/var/lib/hybridops/reports/eveng-images"
 ```
 
 ### 5.1 Download log
 
 When logging is enabled, a per-host log file is written and appended to on each run:
 
-- `output/logs/eveng-images/downloads-<host>.log`
+- `var/log/hybridops/eveng-images/downloads-<host>.log`
 
 Each line summarises a run, including:
 
@@ -192,8 +192,8 @@ Each line summarises a run, including:
 
 Structured YAML reports are written as:
 
-- Per-run: `output/artifacts/eveng-images/report-<host>-<runid>.yml`
-- Latest snapshot: `output/artifacts/eveng-images/report-<host>-latest.yml`
+- Per-run: `var/lib/hybridops/reports/eveng-images/report-<host>-<runid>.yml`
+- Latest snapshot: `var/lib/hybridops/reports/eveng-images/report-<host>-latest.yml`
 
 Example schema:
 
@@ -216,7 +216,7 @@ files:
     status: corrupt
 ```
 
-Reports are suitable for evidence packs, change reviews, and troubleshooting for failed or partial runs.
+Reports are suitable for verification records, change reviews, and troubleshooting for failed or partial runs.
 
 ---
 
@@ -306,12 +306,12 @@ The role is exercised via a compact smoke test in CI rather than a Molecule scen
     - hybridops.helper.eveng_images
 ```
 
-Typical CI integration archives:
+Typical CI integration retains or publishes:
 
-- `output/logs/eveng-images/`
-- `output/artifacts/eveng-images/`
+- `var/log/hybridops/eveng-images/`
+- `var/lib/hybridops/reports/eveng-images/`
 
-as part of the run evidence bundle.
+as part of the run record.
 
 ---
 
@@ -327,5 +327,5 @@ as part of the run evidence bundle.
 
 ## License
 
-See the [HybridOps.Studio licensing overview](https://docs.hybridops.studio/briefings/legal/licensing/)
+See the [HybridOps.Tech licensing overview](https://docs.hybridops.tech/briefings/legal/licensing/)
 for project-wide licence details, including branding and trademark notes.

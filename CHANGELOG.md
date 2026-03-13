@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
+## [0.1.2] - 2026-03-13
+
+### Changed
+
+- Cleaned the helper collection packaging and README surface for Galaxy publication.
+- Narrowed the published helper branch to the validated metadata and role surface only.
+
 ## [0.1.1] - 2026-03-10
 
 ### Changed
@@ -21,12 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Initial publication of the `hybridops.helper` collection.
-- Evidence and NetBox helper roles:
+- Helper and NetBox support roles:
   - `helper_evidence_collector`
   - `helper_netbox_inventory`
-- Reusable operational layout for helper-generated run data.
+- Reusable operational layout for helper-generated data.
 - `galaxy.yml` metadata for namespace `hybridops` and collection name `helper`.
 
-[Unreleased]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/hybridops-tech/ansible-collection-helper/releases/tag/v0.1.0

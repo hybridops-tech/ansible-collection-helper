@@ -147,7 +147,8 @@
   ansible.builtin.copy:
     content: |-
       {{
-        [
+        (
+          [
           'EVE-NG Health Check Report',
           'Host: ' ~ inventory_hostname,
           'Timestamp: ' ~ ansible_date_time.iso8601,
@@ -209,31 +210,32 @@
             ~ ('OK' if eveng_healthcheck_text_virtualization.qemu_dir_exists | default(false) else 'MISSING'),
           '  - IOL: '
             ~ ('OK' if eveng_healthcheck_text_virtualization.iol_dir_exists | default(false) else 'MISSING')
-        ]
-        + (
-          eveng_healthcheck_effective_level in ['images', 'full']
-          | ternary(
-            [
-              '',
-              'Images:',
-              'QEMU: ' ~ (eveng_healthcheck_text_images.qemu_count | default(0) | string),
-              'IOL: ' ~ (eveng_healthcheck_text_images.iol_count | default(0) | string),
-              'Dynamips: ' ~ (eveng_healthcheck_text_images.dynamips_count | default(0) | string)
-            ],
-            []
+          ]
+          + (
+            (eveng_healthcheck_effective_level in ['images', 'full'])
+            | ternary(
+              [
+                '',
+                'Images:',
+                'QEMU: ' ~ (eveng_healthcheck_text_images.qemu_count | default(0) | string),
+                'IOL: ' ~ (eveng_healthcheck_text_images.iol_count | default(0) | string),
+                'Dynamips: ' ~ (eveng_healthcheck_text_images.dynamips_count | default(0) | string)
+              ],
+              []
+            )
           )
-        )
-        + (
-          eveng_healthcheck_effective_level == 'full'
-          | ternary(
-            [
-              '',
-              'Labs:',
-              'Total Labs: ' ~ (eveng_healthcheck_text_labs.total_count | default(0) | string),
-              'Running Nodes: ' ~ (eveng_healthcheck_text_labs.running_nodes | default(0) | string),
-              'Temp Usage: ' ~ (eveng_healthcheck_text_labs.tmp_usage | default('Unknown'))
-            ],
-            []
+          + (
+            (eveng_healthcheck_effective_level == 'full')
+            | ternary(
+              [
+                '',
+                'Labs:',
+                'Total Labs: ' ~ (eveng_healthcheck_text_labs.total_count | default(0) | string),
+                'Running Nodes: ' ~ (eveng_healthcheck_text_labs.running_nodes | default(0) | string),
+                'Temp Usage: ' ~ (eveng_healthcheck_text_labs.tmp_usage | default('Unknown'))
+              ],
+              []
+            )
           )
         )
         | join('\n')

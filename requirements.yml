@@ -1,3 +1,4 @@
 ---
 # isolated dependencies for ansible-collection-helper tests
-collections: []
+collections:
+  - name: ansible.posix

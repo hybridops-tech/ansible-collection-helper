@@ -1,3 +1,4 @@
+---
 # purpose: Seed NetBox via helper pipeline on ctrl-01 (export -> ipam -> vms -> devices)
 # adr: ADR-0002
 # maintainer: HybridOps.Studio
@@ -20,10 +21,10 @@
 - name: Export infra datasets and inventories (optional)
   ansible.builtin.command:
     argv:
-    - python3
-    - control/tools/helper/netbox/export_infra.py
-    - --target
-    - "{{ netbox_seed_target }}"
+      - python3
+      - control/tools/helper/netbox/export_infra.py
+      - --target
+      - "{{ netbox_seed_target }}"
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
@@ -34,8 +35,8 @@
 - name: Import IPAM (prefixes, VLANs, pools)
   ansible.builtin.command:
     argv:
-    - python3
-    - control/tools/helper/netbox/import_prefixes_to_netbox.py
+      - python3
+      - control/tools/helper/netbox/import_prefixes_to_netbox.py
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
@@ -46,8 +47,8 @@
 - name: Import VMs (json first, then csv)
   ansible.builtin.command:
     argv:
-    - python3
-    - control/tools/helper/netbox/import_infra_to_netbox.py
+      - python3
+      - control/tools/helper/netbox/import_infra_to_netbox.py
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
@@ -58,8 +59,8 @@
 - name: Import devices (manual CSV)
   ansible.builtin.command:
     argv:
-    - python3
-    - control/tools/helper/netbox/import_devices_to_netbox.py
+      - python3
+      - control/tools/helper/netbox/import_devices_to_netbox.py
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
@@ -69,25 +70,39 @@
 
 - name: Show phase stderr tail when run with -vv
   ansible.builtin.debug:
-    msg: |
-      export rc={{ _export.rc | default('n/a') }} stderr_tail={{ (_export.stderr | default(''))[-1200:] }}
-      ipam   rc={{ _ipam.rc   | default('n/a') }} stderr_tail={{ (_ipam.stderr   | default(''))[-1200:] }}
-      vms    rc={{ _vms.rc    | default('n/a') }} stderr_tail={{ (_vms.stderr    | default(''))[-1200:] }}
-      dev    rc={{ _devices.rc| default('n/a') }} stderr_tail={{ (_devices.stderr| default(''))[-1200:] }}
+    msg: >-
+      export rc={{ _export.rc | default('n/a') }}
+      stderr_tail={{ (_export.stderr | default(''))[-1200:] }}
+      ipam rc={{ _ipam.rc | default('n/a') }}
+      stderr_tail={{ (_ipam.stderr | default(''))[-1200:] }}
+      vms rc={{ _vms.rc | default('n/a') }}
+      stderr_tail={{ (_vms.stderr | default(''))[-1200:] }}
+      devices rc={{ _devices.rc | default('n/a') }}
+      stderr_tail={{ (_devices.stderr | default(''))[-1200:] }}
   when: (ansible_verbosity | default(0)) | int >= 2
   changed_when: false
 
 - name: Fail if any enabled phase failed
   ansible.builtin.fail:
-    msg: "NetBox seed phase '{{ item.name }}' failed (rc={{ item.rc }}). See stderr (run with -vv) and evidence outputs."
+    msg: >-
+      NetBox seed phase '{{ item.name }}' failed (rc={{ item.rc }}).
+      See stderr (run with -vv) and evidence outputs.
   loop:
-  - { name: "export", enabled: "{{ netbox_seed_run_export | bool }}", rc: "{{ _export.rc  | default(0) }}" }
-  - { name: "ipam", enabled: "{{ netbox_seed_run_ipam | bool }}", rc: "{{ _ipam.rc    | default(0) }}" }
-  - { name: "vms", enabled: "{{ netbox_seed_run_vms | bool }}", rc: "{{ _vms.rc     | default(0) }}" }
-  - { name: "devices", enabled: "{{ netbox_seed_run_devices | bool }}", rc: "{{ _devices.rc | default(0) }}" }
+    - name: export
+      enabled: "{{ netbox_seed_run_export | bool }}"
+      rc: "{{ _export.rc | default(0) }}"
+    - name: ipam
+      enabled: "{{ netbox_seed_run_ipam | bool }}"
+      rc: "{{ _ipam.rc | default(0) }}"
+    - name: vms
+      enabled: "{{ netbox_seed_run_vms | bool }}"
+      rc: "{{ _vms.rc | default(0) }}"
+    - name: devices
+      enabled: "{{ netbox_seed_run_devices | bool }}"
+      rc: "{{ _devices.rc | default(0) }}"
   when:
-  - item.enabled | bool
-  - (item.rc | int) != 0
+    - item.enabled | bool
+    - (item.rc | int) != 0
 
 - name: Evidence
   ansible.builtin.include_tasks: evidence.yml

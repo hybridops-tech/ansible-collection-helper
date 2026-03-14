@@ -17,7 +17,7 @@ galaxy_info:
     - name: EL
       versions: ["9"]
     - name: Ubuntu
-      versions: ["22.04", "24.04"]
+      versions: ["jammy", "noble"]
 
   galaxy_tags:
     - netbox

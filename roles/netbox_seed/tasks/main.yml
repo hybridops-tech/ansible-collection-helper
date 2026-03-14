@@ -13,8 +13,8 @@
 - name: Build seed environment
   ansible.builtin.set_fact:
     _netbox_seed_env:
-      NETBOX_API_URL: "{{ netbox_api_url }}"
-      NETBOX_API_TOKEN: "{{ netbox_api_token }}"
+      NETBOX_API_URL: "{{ netbox_seed_api_url }}"
+      NETBOX_API_TOKEN: "{{ netbox_seed_api_token }}"
   changed_when: false
   no_log: true
 
@@ -28,7 +28,7 @@
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
-  register: _export
+  register: netbox_seed_export
   changed_when: false
   when: netbox_seed_run_export | bool
 
@@ -40,7 +40,7 @@
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
-  register: _ipam
+  register: netbox_seed_ipam
   changed_when: false
   when: netbox_seed_run_ipam | bool
 
@@ -52,7 +52,7 @@
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
-  register: _vms
+  register: netbox_seed_vms
   changed_when: false
   when: netbox_seed_run_vms | bool
 
@@ -64,21 +64,21 @@
   args:
     chdir: "{{ netbox_seed_repo_root }}"
   environment: "{{ _netbox_seed_env }}"
-  register: _devices
+  register: netbox_seed_devices
   changed_when: false
   when: netbox_seed_run_devices | bool
 
 - name: Show phase stderr tail when run with -vv
   ansible.builtin.debug:
     msg: >-
-      export rc={{ _export.rc | default('n/a') }}
-      stderr_tail={{ (_export.stderr | default(''))[-1200:] }}
-      ipam rc={{ _ipam.rc | default('n/a') }}
-      stderr_tail={{ (_ipam.stderr | default(''))[-1200:] }}
-      vms rc={{ _vms.rc | default('n/a') }}
-      stderr_tail={{ (_vms.stderr | default(''))[-1200:] }}
-      devices rc={{ _devices.rc | default('n/a') }}
-      stderr_tail={{ (_devices.stderr | default(''))[-1200:] }}
+      export rc={{ netbox_seed_export.rc | default('n/a') }}
+      stderr_tail={{ (netbox_seed_export.stderr | default(''))[-1200:] }}
+      ipam rc={{ netbox_seed_ipam.rc | default('n/a') }}
+      stderr_tail={{ (netbox_seed_ipam.stderr | default(''))[-1200:] }}
+      vms rc={{ netbox_seed_vms.rc | default('n/a') }}
+      stderr_tail={{ (netbox_seed_vms.stderr | default(''))[-1200:] }}
+      devices rc={{ netbox_seed_devices.rc | default('n/a') }}
+      stderr_tail={{ (netbox_seed_devices.stderr | default(''))[-1200:] }}
   when: (ansible_verbosity | default(0)) | int >= 2
   changed_when: false
 
@@ -90,16 +90,16 @@
   loop:
     - name: export
       enabled: "{{ netbox_seed_run_export | bool }}"
-      rc: "{{ _export.rc | default(0) }}"
+      rc: "{{ netbox_seed_export.rc | default(0) }}"
     - name: ipam
       enabled: "{{ netbox_seed_run_ipam | bool }}"
-      rc: "{{ _ipam.rc | default(0) }}"
+      rc: "{{ netbox_seed_ipam.rc | default(0) }}"
     - name: vms
       enabled: "{{ netbox_seed_run_vms | bool }}"
-      rc: "{{ _vms.rc | default(0) }}"
+      rc: "{{ netbox_seed_vms.rc | default(0) }}"
     - name: devices
       enabled: "{{ netbox_seed_run_devices | bool }}"
-      rc: "{{ _devices.rc | default(0) }}"
+      rc: "{{ netbox_seed_devices.rc | default(0) }}"
   when:
     - item.enabled | bool
     - (item.rc | int) != 0

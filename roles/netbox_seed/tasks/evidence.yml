@@ -9,7 +9,11 @@
     _netbox_seed_repo_artifacts_dir: >-
       {{
         netbox_seed_artifacts_dir
-        | default(netbox_seed_repo_root ~ '/output/artifacts/netbox/seed/' ~ ansible_date_time.iso8601_basic_short, true)
+        | default(
+          netbox_seed_repo_root ~ '/output/artifacts/netbox/seed/' ~
+          ansible_date_time.iso8601_basic_short,
+          true
+        )
       }}
   changed_when: false
 
@@ -32,13 +36,13 @@
 
 - name: Capture NetBox API status
   ansible.builtin.uri:
-    url: "{{ netbox_api_url.rstrip('/') }}/api/status/"
+    url: "{{ netbox_seed_api_url.rstrip('/') }}/api/status/"
     headers:
-      Authorization: "Token {{ netbox_api_token }}"
+      Authorization: "Token {{ netbox_seed_api_token }}"
     validate_certs: "{{ netbox_seed_validate_tls | bool }}"
-    status_code: [ 200 ]
+    status_code: [200]
     return_content: true
-  register: _nb_status
+  register: netbox_seed_status
   changed_when: false
   failed_when: false
 
@@ -46,14 +50,18 @@
   ansible.builtin.set_fact:
     _netbox_seed_api_status_redacted:
       fetched_at: "{{ ansible_date_time.iso8601 }}"
-      api_url: "{{ netbox_api_url.rstrip('/') }}"
-      ok: "{{ (_nb_status.status | default(0) | int) == 200 }}"
-      status_code: "{{ _nb_status.status | default(0) }}"
+      api_url: "{{ netbox_seed_api_url.rstrip('/') }}"
+      ok: "{{ (netbox_seed_status.status | default(0) | int) == 200 }}"
+      status_code: "{{ netbox_seed_status.status | default(0) }}"
       netbox:
-        version: "{{ _nb_status.json.netbox_version | default(_nb_status.json.netbox.version | default('')) }}"
-        python_version: "{{ _nb_status.json.python_version | default('') }}"
-        django_version: "{{ _nb_status.json.django_version | default('') }}"
-        plugins: "{{ _nb_status.json.plugins | default([]) }}"
+        version: >-
+          {{
+            netbox_seed_status.json.netbox_version
+            | default(netbox_seed_status.json.netbox.version | default(''))
+          }}
+        python_version: "{{ netbox_seed_status.json.python_version | default('') }}"
+        django_version: "{{ netbox_seed_status.json.django_version | default('') }}"
+        plugins: "{{ netbox_seed_status.json.plugins | default([]) }}"
   changed_when: false
 
 - name: Write run summary (host evidence)
@@ -84,10 +92,10 @@
   ansible.builtin.copy:
     dest: "{{ _netbox_seed_host_evidence_dir }}/phases.txt"
     content: |
-      export:  rc={{ _export.rc | default('n/a') }}  enabled={{ netbox_seed_run_export | bool }}
-      ipam:    rc={{ _ipam.rc | default('n/a') }}    enabled={{ netbox_seed_run_ipam | bool }}
-      vms:     rc={{ _vms.rc | default('n/a') }}     enabled={{ netbox_seed_run_vms | bool }}
-      devices: rc={{ _devices.rc | default('n/a') }} enabled={{ netbox_seed_run_devices | bool }}
+      export:  rc={{ netbox_seed_export.rc | default('n/a') }}  enabled={{ netbox_seed_run_export | bool }}
+      ipam:    rc={{ netbox_seed_ipam.rc | default('n/a') }}    enabled={{ netbox_seed_run_ipam | bool }}
+      vms:     rc={{ netbox_seed_vms.rc | default('n/a') }}     enabled={{ netbox_seed_run_vms | bool }}
+      devices: rc={{ netbox_seed_devices.rc | default('n/a') }} enabled={{ netbox_seed_run_devices | bool }}
     owner: root
     group: root
     mode: "0640"
@@ -102,11 +110,11 @@
     group: root
     mode: "0640"
   loop:
-  - { stream: "stdout", content: "{{ _export.stdout | default('') }}" }
-  - { stream: "stderr", content: "{{ _export.stderr | default('') }}" }
+    - {stream: "stdout", content: "{{ netbox_seed_export.stdout | default('') }}"}
+    - {stream: "stderr", content: "{{ netbox_seed_export.stderr | default('') }}"}
   when:
-  - netbox_seed_evidence_include_command_tails | default(false) | bool
-  - netbox_seed_run_export | bool
+    - netbox_seed_evidence_include_command_tails | default(false) | bool
+    - netbox_seed_run_export | bool
 
 - name: Write ipam tails (host evidence)
   ansible.builtin.copy:
@@ -116,11 +124,11 @@
     group: root
     mode: "0640"
   loop:
-  - { stream: "stdout", content: "{{ _ipam.stdout | default('') }}" }
-  - { stream: "stderr", content: "{{ _ipam.stderr | default('') }}" }
+    - {stream: "stdout", content: "{{ netbox_seed_ipam.stdout | default('') }}"}
+    - {stream: "stderr", content: "{{ netbox_seed_ipam.stderr | default('') }}"}
   when:
-  - netbox_seed_evidence_include_command_tails | default(false) | bool
-  - netbox_seed_run_ipam | bool
+    - netbox_seed_evidence_include_command_tails | default(false) | bool
+    - netbox_seed_run_ipam | bool
 
 - name: Write vms tails (host evidence)
   ansible.builtin.copy:
@@ -130,11 +138,11 @@
     group: root
     mode: "0640"
   loop:
-  - { stream: "stdout", content: "{{ _vms.stdout | default('') }}" }
-  - { stream: "stderr", content: "{{ _vms.stderr | default('') }}" }
+    - {stream: "stdout", content: "{{ netbox_seed_vms.stdout | default('') }}"}
+    - {stream: "stderr", content: "{{ netbox_seed_vms.stderr | default('') }}"}
   when:
-  - netbox_seed_evidence_include_command_tails | default(false) | bool
-  - netbox_seed_run_vms | bool
+    - netbox_seed_evidence_include_command_tails | default(false) | bool
+    - netbox_seed_run_vms | bool
 
 - name: Write devices tails (host evidence)
   ansible.builtin.copy:
@@ -144,11 +152,11 @@
     group: root
     mode: "0640"
   loop:
-  - { stream: "stdout", content: "{{ _devices.stdout | default('') }}" }
-  - { stream: "stderr", content: "{{ _devices.stderr | default('') }}" }
+    - {stream: "stdout", content: "{{ netbox_seed_devices.stdout | default('') }}"}
+    - {stream: "stderr", content: "{{ netbox_seed_devices.stderr | default('') }}"}
   when:
-  - netbox_seed_evidence_include_command_tails | default(false) | bool
-  - netbox_seed_run_devices | bool
+    - netbox_seed_evidence_include_command_tails | default(false) | bool
+    - netbox_seed_run_devices | bool
 
 # ---- Repo artifact mirroring (HybridOps convenience). Default OFF for public use. ----
 
@@ -170,7 +178,9 @@
     group: root
     mode: "0640"
   loop:
-  - { src: "{{ _netbox_seed_host_evidence_dir }}/run-summary.txt", dst: "run-summary.txt" }
-  - { src: "{{ _netbox_seed_host_evidence_dir }}/netbox-api-status.redacted.json", dst: "netbox-api-status.redacted.json" }
-  - { src: "{{ _netbox_seed_host_evidence_dir }}/phases.txt", dst: "phases.txt" }
+    - {src: "{{ _netbox_seed_host_evidence_dir }}/run-summary.txt", dst: "run-summary.txt"}
+    - >-
+      {src: "{{ _netbox_seed_host_evidence_dir }}/netbox-api-status.redacted.json",
+      dst: "netbox-api-status.redacted.json"}
+    - {src: "{{ _netbox_seed_host_evidence_dir }}/phases.txt", dst: "phases.txt"}
   when: netbox_seed_artifacts_enabled | default(false) | bool

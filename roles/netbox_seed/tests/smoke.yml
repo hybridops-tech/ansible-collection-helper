@@ -3,7 +3,7 @@
 # adr: ADR-0606-ansible-collections-release-process
 # maintainer: HybridOps.Studio
 
-- name: netbox_seed smoke test
+- name: NetBox seed smoke test
   hosts: seed_controller
   become: true
 

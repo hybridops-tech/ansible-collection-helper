@@ -8,15 +8,15 @@ galaxy_info:
   min_ansible_version: "2.12"
 
   platforms:
-  - name: Ubuntu
-    versions:
-    - focal
-    - jammy
+    - name: Ubuntu
+      versions:
+        - focal
+        - jammy
 
   galaxy_tags:
-  - networking
-  - eveng
-  - labs
-  - network-automation
+    - networking
+    - eveng
+    - labs
+    - automation
 
 dependencies: []

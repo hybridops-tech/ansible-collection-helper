@@ -1,21 +1,24 @@
 ---
-# Health check configuration
-health_check_level: basic
-health_check_fail_on_warning: false
-health_check_report_format: summary
+# purpose: Defaults for eveng_healthcheck
+# maintainer: HybridOps.Studio
 
-# Output configuration
-health_check_save_output: true
-health_check_output_dir: "{{ playbook_dir }}/outputs/artifacts/ansible/eveng_healthcheck"
-health_check_reports_dir: "{{ playbook_dir }}/outputs/reports/ansible/eveng_healthcheck"
+eveng_healthcheck_level: basic
+eveng_healthcheck_fail_on_warning: false
+eveng_healthcheck_report_format: summary
 
-# Component checks
-health_check_services: true
-health_check_database: true
-health_check_api: true
-health_check_kvm: true
-health_check_images: false
-health_check_labs: false
+eveng_healthcheck_save_output: true
+eveng_healthcheck_output_dir: >-
+  {{ playbook_dir }}/outputs/artifacts/ansible/eveng_healthcheck
+eveng_healthcheck_reports_dir: >-
+  {{ playbook_dir }}/outputs/reports/ansible/eveng_healthcheck
 
-# Credentials
-eveng_admin_password: "{{ lookup('env', 'EVENG_ADMIN_PASSWORD') | default('eve', true) }}"
+eveng_healthcheck_services_enabled: true
+eveng_healthcheck_database_enabled: true
+eveng_healthcheck_api_enabled: true
+eveng_healthcheck_virtualization_enabled: true
+eveng_healthcheck_images_enabled: false
+eveng_healthcheck_labs_enabled: false
+
+eveng_healthcheck_admin_username: admin
+eveng_healthcheck_admin_password: >-
+  {{ lookup('ansible.builtin.env', 'EVENG_ADMIN_PASSWORD') | default('eve', true) }}

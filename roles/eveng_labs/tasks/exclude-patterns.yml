@@ -2,16 +2,16 @@
 # maintainer: HybridOps.Studio
 
 - name: Find labs matching exclude patterns
-  find:
+  ansible.builtin.find:
     paths: "{{ eveng_labs_install_root }}"
-    patterns: "{{ eveng_exclude_patterns }}"
-    recurse: yes
+    patterns: "{{ eveng_labs_effective_exclude_patterns }}"
+    recurse: true
   register: eveng_labs_excluded
 
 - name: Remove excluded labs
-  file:
+  ansible.builtin.file:
     path: "{{ item.path }}"
     state: absent
   loop: "{{ eveng_labs_excluded.files }}"
   when: eveng_labs_excluded.files | length > 0
-  notify: fix lab permissions
+  notify: Fix lab permissions

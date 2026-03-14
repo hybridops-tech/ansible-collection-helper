@@ -2,32 +2,34 @@
 # maintainer: HybridOps.Studio
 
 - name: Discover installable files when metadata is not provided
-  find:
+  ansible.builtin.find:
     paths: "{{ eveng_images_cache_dir }}"
     patterns:
-    - "*.tar.gz"
-    - "*.tgz"
-    - "*.zip"
-    - "*.gz"
-    - "*.qcow2"
-    - "*.img"
-    - "*.bin"
-    recurse: no
-  register: install_files
-  when: eveng_downloaded_files is not defined
+      - "*.tar.gz"
+      - "*.tgz"
+      - "*.zip"
+      - "*.gz"
+      - "*.qcow2"
+      - "*.img"
+      - "*.bin"
+    recurse: false
+  register: eveng_images_install_files
+  when: eveng_images_downloaded_files is not defined
 
 - name: Use previously discovered download metadata when available
-  set_fact:
-    install_files: "{{ { 'files': eveng_downloaded_files } }}"
-  when: eveng_downloaded_files is defined
+  ansible.builtin.set_fact:
+    eveng_images_install_files:
+      files: "{{ eveng_images_downloaded_files }}"
+  when: eveng_images_downloaded_files is defined
 
 - name: Fail when there is nothing to install
-  fail:
+  ansible.builtin.fail:
     msg: "No archives or images found to install in {{ eveng_images_cache_dir }}"
-  when: install_files.files | length == 0
+  when: eveng_images_install_files.files | length == 0
 
 - name: Detect type for each file
-  shell: |
+  ansible.builtin.shell: |
+    set -o pipefail
     set -e
     ARCHIVE="{{ item.path }}"
     BASENAME="$(basename "$ARCHIVE")"
@@ -76,8 +78,8 @@
     echo "qemu"
   args:
     executable: /bin/bash
-  loop: "{{ install_files.files }}"
+  loop: "{{ eveng_images_install_files.files }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  register: detected_types
+  register: eveng_images_detected_types
   changed_when: false

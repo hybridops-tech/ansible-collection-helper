@@ -2,23 +2,23 @@
 # maintainer: HybridOps.Studio
 
 - name: Ensure staging directory exists
-  stat:
+  ansible.builtin.stat:
     path: "{{ eveng_labs_staging_dir }}"
   register: eveng_labs_staging_stat
 
 - name: Fail when staging directory is missing
-  fail:
+  ansible.builtin.fail:
     msg: "Staging directory not found or empty: {{ eveng_labs_staging_dir }}"
   when: not eveng_labs_staging_stat.stat.exists
 
 - name: Install labs from staging into target directory
-  shell: |
+  ansible.builtin.shell: |
     set -e
     SRC="{{ eveng_labs_staging_dir }}/"
-    DEST_BASE="/opt/unetlab/labs"
+    DEST_BASE="{{ eveng_labs_install_root }}"
 
-    if [ "{{ eveng_lab_folders | default([]) | length }}" -gt 0 ]; then
-      for folder in {{ eveng_lab_folders | default([]) | join(' ') }}; do
+    if [ "{{ eveng_labs_effective_lab_folders | length }}" -gt 0 ]; then
+      for folder in {{ eveng_labs_effective_lab_folders | join(' ') }}; do
         DEST="${DEST_BASE}/${folder}"
         mkdir -p "$DEST"
         rsync -a "$SRC" "$DEST"/

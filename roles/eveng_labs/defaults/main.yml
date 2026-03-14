@@ -16,19 +16,22 @@ eveng_labs_remote_path: /mnt/nfs/eveng-labs
 eveng_labs_remote_host: "{{ inventory_hostname }}"
 
 # Target folders under /opt/unetlab/labs
-eveng_lab_folders: []
+eveng_labs_lab_folders: []
 
 # Staging area on EVE-NG host
 eveng_labs_staging_dir: /tmp/eveng_labs_staging
 
 # Exclusion patterns for student deployments
-eveng_exclude_patterns: []
+eveng_labs_exclude_patterns: []
+
+# Install root on the EVE-NG host.
+eveng_labs_install_root: /opt/unetlab/labs
 
 # Shared rsync exclude options
 eveng_labs_sync_exclude_patterns:
-- "--exclude=.git"
-- "--exclude=*.md"
-- "--exclude=README*"
-- "--exclude=*.bak"
-- "--exclude=*~"
-- "--exclude=.DS_Store"
+  - "--exclude=.git"
+  - "--exclude=*.md"
+  - "--exclude=README*"
+  - "--exclude=*.bak"
+  - "--exclude=*~"
+  - "--exclude=.DS_Store"

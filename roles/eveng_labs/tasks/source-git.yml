@@ -3,24 +3,24 @@
 # maintainer: HybridOps.Studio
 
 - name: Ensure git is installed
-  apt:
+  ansible.builtin.apt:
     name: git
     state: present
-    update_cache: yes
+    update_cache: true
 
 - name: Clear staging directory
-  file:
+  ansible.builtin.file:
     path: "{{ eveng_labs_staging_dir }}"
     state: absent
 
 - name: Recreate staging directory
-  file:
+  ansible.builtin.file:
     path: "{{ eveng_labs_staging_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Clone labs repository into staging
-  git:
+  ansible.builtin.git:
     repo: "{{ eveng_labs_git_repo }}"
     dest: "{{ eveng_labs_staging_dir }}"
     version: "{{ eveng_labs_git_branch | default('main') }}"

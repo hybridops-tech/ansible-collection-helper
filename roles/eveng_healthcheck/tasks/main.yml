@@ -1,74 +1,110 @@
 ---
-# EVE-NG health check entry point
+# purpose: EVE-NG health check entry point
+# maintainer: HybridOps.Studio
+
+- name: Derive effective healthcheck settings
+  ansible.builtin.set_fact:
+    eveng_healthcheck_effective_level: >-
+      {{ vars.get('health_check_level', eveng_healthcheck_level) }}
+    eveng_healthcheck_effective_fail_on_warning: >-
+      {{ vars.get('health_check_fail_on_warning', eveng_healthcheck_fail_on_warning) }}
+    eveng_healthcheck_effective_report_format: >-
+      {{ vars.get('health_check_report_format', eveng_healthcheck_report_format) }}
+    eveng_healthcheck_effective_save_output: >-
+      {{ vars.get('health_check_save_output', eveng_healthcheck_save_output) }}
+    eveng_healthcheck_effective_output_dir: >-
+      {{ vars.get('health_check_output_dir', eveng_healthcheck_output_dir) }}
+    eveng_healthcheck_effective_reports_dir: >-
+      {{ vars.get('health_check_reports_dir', eveng_healthcheck_reports_dir) }}
+    eveng_healthcheck_effective_services_enabled: >-
+      {{ vars.get('health_check_services', eveng_healthcheck_services_enabled) }}
+    eveng_healthcheck_effective_database_enabled: >-
+      {{ vars.get('health_check_database', eveng_healthcheck_database_enabled) }}
+    eveng_healthcheck_effective_api_enabled: >-
+      {{ vars.get('health_check_api', eveng_healthcheck_api_enabled) }}
+    eveng_healthcheck_effective_virtualization_enabled: >-
+      {{ vars.get('health_check_kvm', eveng_healthcheck_virtualization_enabled) }}
+    eveng_healthcheck_effective_images_enabled: >-
+      {{ vars.get('health_check_images', eveng_healthcheck_images_enabled) }}
+    eveng_healthcheck_effective_labs_enabled: >-
+      {{ vars.get('health_check_labs', eveng_healthcheck_labs_enabled) }}
+    eveng_healthcheck_effective_admin_username: >-
+      {{ vars.get('eveng_admin_username', eveng_healthcheck_admin_username) }}
+    eveng_healthcheck_effective_admin_password: >-
+      {{ vars.get('eveng_admin_password', eveng_healthcheck_admin_password) }}
+  changed_when: false
+  tags:
+    - always
 
 - name: Initialize health check results
-  set_fact:
-    health_check_results:
+  ansible.builtin.set_fact:
+    eveng_healthcheck_results:
       services: {}
       database: {}
       api: {}
       virtualization: {}
       images: {}
       labs: {}
-      overall_status: "unknown"
+      overall_status: unknown
+  changed_when: false
   tags:
-  - always
+    - always
 
-- name: Service health checks
-  include_tasks: services.yml
-  when: health_check_services | bool
+- name: Run service health checks
+  ansible.builtin.include_tasks: services.yml
+  when: eveng_healthcheck_effective_services_enabled | bool
   tags:
-  - health
-  - health_services
-  - services
+    - health
+    - health_services
+    - services
 
-- name: Database health checks
-  include_tasks: database.yml
-  when: health_check_database | bool
+- name: Run database health checks
+  ansible.builtin.include_tasks: database.yml
+  when: eveng_healthcheck_effective_database_enabled | bool
   tags:
-  - health
-  - health_database
-  - database
+    - health
+    - health_database
+    - database
 
-- name: API health checks
-  include_tasks: api.yml
-  when: health_check_api | bool
+- name: Run API health checks
+  ansible.builtin.include_tasks: api.yml
+  when: eveng_healthcheck_effective_api_enabled | bool
   tags:
-  - health
-  - health_api
-  - api
+    - health
+    - health_api
+    - api
 
-- name: Virtualization health checks
-  include_tasks: virtualization.yml
-  when: health_check_kvm | bool
+- name: Run virtualization health checks
+  ansible.builtin.include_tasks: virtualization.yml
+  when: eveng_healthcheck_effective_virtualization_enabled | bool
   tags:
-  - health
-  - health_virtualization
-  - virtualization
-  - kvm
+    - health
+    - health_virtualization
+    - virtualization
+    - kvm
 
-- name: Image health checks
-  include_tasks: images.yml
+- name: Run image health checks
+  ansible.builtin.include_tasks: images.yml
   when:
-  - health_check_images | bool
-  - health_check_level in ['images', 'full']
+    - eveng_healthcheck_effective_images_enabled | bool
+    - eveng_healthcheck_effective_level in ['images', 'full']
   tags:
-  - health
-  - health_images
-  - images
+    - health
+    - health_images
+    - images
 
-- name: Lab health checks
-  include_tasks: labs.yml
+- name: Run lab health checks
+  ansible.builtin.include_tasks: labs.yml
   when:
-  - health_check_labs | bool
-  - health_check_level == 'full'
+    - eveng_healthcheck_effective_labs_enabled | bool
+    - eveng_healthcheck_effective_level == 'full'
   tags:
-  - health
-  - health_labs
-  - labs
+    - health
+    - health_labs
+    - labs
 
 - name: Generate health report
-  include_tasks: report.yml
+  ansible.builtin.include_tasks: report.yml
   tags:
-  - always
-  - report
+    - always
+    - report

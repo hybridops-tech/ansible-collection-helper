@@ -2,81 +2,81 @@
 # maintainer: HybridOps.Studio
 
 - name: Validate remote configuration
-  assert:
+  ansible.builtin.assert:
     that:
-    - eveng_images_remote_host is defined
-    - eveng_images_remote_host != ''
-    - eveng_images_remote_path is defined
-    - eveng_images_remote_path != ''
+      - eveng_images_remote_host is defined
+      - eveng_images_remote_host != ''
+      - eveng_images_remote_path is defined
+      - eveng_images_remote_path != ''
     fail_msg: "eveng_images_remote_host and eveng_images_remote_path must be defined"
 
 - name: Check remote path
-  stat:
+  ansible.builtin.stat:
     path: "{{ eveng_images_remote_path }}"
   delegate_to: "{{ eveng_images_remote_host }}"
-  register: remote_path_stat
+  register: eveng_images_remote_path_stat
 
 - name: Fail if remote path not found
-  fail:
+  ansible.builtin.fail:
     msg: "Remote path not found: {{ eveng_images_remote_path }}"
-  when: not remote_path_stat.stat.exists
+  when: not eveng_images_remote_path_stat.stat.exists
 
 - name: Create cache directory
-  file:
+  ansible.builtin.file:
     path: "{{ eveng_images_cache_dir }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Sync from remote directory
-  synchronize:
+  ansible.posix.synchronize:
     src: "{{ eveng_images_remote_path }}/"
     dest: "{{ eveng_images_cache_dir }}/"
     rsync_opts:
-    - "--include=*.tar.gz"
-    - "--include=*.tgz"
-    - "--include=*.zip"
-    - "--include=*.gz"
-    - "--include=*.qcow2"
-    - "--include=*.img"
-    - "--include=*.bin"
-    - "--exclude=*"
+      - "--include=*.tar.gz"
+      - "--include=*.tgz"
+      - "--include=*.zip"
+      - "--include=*.gz"
+      - "--include=*.qcow2"
+      - "--include=*.img"
+      - "--include=*.bin"
+      - "--exclude=*"
   delegate_to: "{{ eveng_images_remote_host }}"
-  when: remote_path_stat.stat.isdir
+  when: eveng_images_remote_path_stat.stat.isdir
 
 - name: Copy remote file
-  synchronize:
+  ansible.posix.synchronize:
     src: "{{ eveng_images_remote_path }}"
     dest: "{{ eveng_images_cache_dir }}/{{ eveng_images_remote_path | basename }}"
   delegate_to: "{{ eveng_images_remote_host }}"
-  when: remote_path_stat.stat.isreg
+  when: eveng_images_remote_path_stat.stat.isreg
 
 - name: Find synced images
-  find:
+  ansible.builtin.find:
     paths: "{{ eveng_images_cache_dir }}"
     patterns:
-    - "*.tar.gz"
-    - "*.tgz"
-    - "*.zip"
-    - "*.gz"
-    - "*.qcow2"
-    - "*.img"
-    - "*.bin"
-    recurse: yes
-  register: downloaded_files
+      - "*.tar.gz"
+      - "*.tgz"
+      - "*.zip"
+      - "*.gz"
+      - "*.qcow2"
+      - "*.img"
+      - "*.bin"
+    recurse: true
+  register: eveng_images_downloaded_files_result
 
 - name: Fail if no images found
-  fail:
+  ansible.builtin.fail:
     msg: "No image files found in {{ eveng_images_cache_dir }}"
-  when: downloaded_files.files | length == 0
+  when: eveng_images_downloaded_files_result.files | length == 0
 
 - name: Record download metadata
-  set_fact:
-    eveng_downloaded_files: "{{ downloaded_files.files }}"
+  ansible.builtin.set_fact:
+    eveng_images_downloaded_files: "{{ eveng_images_downloaded_files_result.files }}"
 
 - name: Capture download run timestamp
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_run_at: "{{ ansible_date_time.iso8601 }}"
 
 - name: Build image report and export logs
-  include_tasks: report.yml
+  ansible.builtin.include_tasks: report.yml
   when: eveng_images_generate_report | default(true)

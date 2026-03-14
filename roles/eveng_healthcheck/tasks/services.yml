@@ -1,95 +1,93 @@
 ---
-# Service health checks
+# purpose: Service health checks
+# maintainer: HybridOps.Studio
 
-- name: Check Apache service status
-  systemd:
-    name: apache2
-  register: apache_service
-  failed_when: false
-  tags:
-    - health_services
-    - apache
-
-- name: Check Apache is running
-  service_facts:
-  register: service_facts_result
+- name: Gather service facts
+  ansible.builtin.service_facts:
   tags:
     - health_services
 
-- name: Set Apache status
-  set_fact:  
-    health_check_results:  "{{ health_check_results | combine({'services':  health_check_results.services | combine({'apache': apache_status})}) }}"
-  vars:
-    apache_status: 
-      running: "{{ ansible_facts.services['apache2.service'].state == 'running' }}"
-      enabled: "{{ ansible_facts.services['apache2.service'].status == 'enabled' }}"
-  tags: 
-    - health_services
-    - apache
-
-- name: Check MySQL service status
-  service_facts:
-  tags:
-    - health_services
-    - mysql
-
-- name:  Determine database service
-  set_fact:
-    db_service_name: "{{ 'mysql.service' if 'mysql.service' in ansible_facts.services else 'mariadb.service' }}"
-  tags:
-    - health_services
-    - mysql
-
-- name: Set database service status
-  set_fact:  
-    health_check_results: "{{ health_check_results | combine({'services': health_check_results.services | combine({'database': db_status})}) }}"
-  vars:
-    db_status: 
-      running: "{{ ansible_facts.services[db_service_name].state == 'running' }}"
-      enabled: "{{ ansible_facts.services[db_service_name].status == 'enabled' }}"
-      service:  "{{ db_service_name | replace('.service', '') }}"
+- name: Determine database service name
+  ansible.builtin.set_fact:
+    eveng_healthcheck_db_service_name: >-
+      {{
+        'mysql.service'
+        if 'mysql.service' in ansible_facts.services
+        else 'mariadb.service'
+      }}
+  changed_when: false
   tags:
     - health_services
     - mysql
 
 - name: Check Apache port listening
-  wait_for:
+  ansible.builtin.wait_for:
     port: 80
     timeout: 5
-  register: apache_port
+  register: eveng_healthcheck_apache_port
   failed_when: false
-  tags: 
+  tags:
     - health_services
     - apache
     - ports
 
-- name: Check MySQL port listening
-  wait_for:
+- name: Check database port listening
+  ansible.builtin.wait_for:
     port: 3306
     timeout: 5
-  register: mysql_port
+  register: eveng_healthcheck_database_port
   failed_when: false
-  tags: 
+  tags:
     - health_services
     - mysql
     - ports
 
 - name: Update service health results
-  set_fact:
-    health_check_results: "{{ health_check_results | combine({'services': health_check_results.services | combine({'ports': port_status})}) }}"
-  vars:
-    port_status:  
-      apache: "{{ apache_port is success }}"
-      mysql: "{{ mysql_port is success }}"
+  ansible.builtin.set_fact:
+    eveng_healthcheck_results: >-
+      {{
+        eveng_healthcheck_results
+        | combine(
+          {
+            'services': {
+              'apache': {
+                'running': (
+                  ansible_facts.services['apache2.service'].state | default('')
+                ) == 'running',
+                'enabled': (
+                  ansible_facts.services['apache2.service'].status | default('')
+                ) == 'enabled'
+              },
+              'database': {
+                'running': (
+                  ansible_facts.services[eveng_healthcheck_db_service_name].state
+                  | default('')
+                ) == 'running',
+                'enabled': (
+                  ansible_facts.services[eveng_healthcheck_db_service_name].status
+                  | default('')
+                ) == 'enabled',
+                'service': eveng_healthcheck_db_service_name
+                  | replace('.service', '')
+              },
+              'ports': {
+                'apache': eveng_healthcheck_apache_port is succeeded,
+                'mysql': eveng_healthcheck_database_port is succeeded
+              }
+            }
+          },
+          recursive=True
+        )
+      }}
+  changed_when: false
   tags:
     - health_services
-    - ports
 
 - name: Service health summary
-  debug: 
-    msg: 
-      - "Apache: {{ 'OK' if health_check_results.services.apache.running else 'FAILED' }}"
-      - "Database: {{ 'OK' if health_check_results.services.database.running else 'FAILED' }}"
-  when: health_check_report_format == 'detailed'
+  ansible.builtin.debug:
+    msg:
+      - "Apache: {{ 'OK' if eveng_healthcheck_results.services.apache.running else 'FAILED' }}"
+      - "Database: {{ 'OK' if eveng_healthcheck_results.services.database.running else 'FAILED' }}"
+  when: eveng_healthcheck_effective_report_format == 'detailed'
   tags:
     - health_services

@@ -2,19 +2,19 @@
 # maintainer: HybridOps.Studio
 
 - name: Ensure run timestamp is set
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_run_at: "{{ eveng_images_run_at | default(ansible_date_time.iso8601) }}"
 
 - name: Derive run identifier
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_run_id: "{{ eveng_images_run_at | regex_replace('[^0-9]', '') }}"
 
 - name: Normalise corrupt files fact
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_corrupt_files: "{{ eveng_images_corrupt_files | default([]) }}"
 
 - name: Compute controller output directories and log path
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_log_dir_controller: >-
       {{
         eveng_images_log_dir_controller
@@ -35,22 +35,22 @@
   delegate_to: localhost
   become: false
   run_once: true
-  file:
+  ansible.builtin.file:
     path: "{{ eveng_images_log_dir_controller }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Ensure controller report directory exists
   delegate_to: localhost
   become: false
   run_once: true
-  file:
+  ansible.builtin.file:
     path: "{{ eveng_images_report_dir_controller }}"
     state: directory
-    mode: '0755'
+    mode: "0755"
 
 - name: Build image report entries
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_report_files: >-
       {{
         (eveng_images_report_files | default([]))
@@ -83,15 +83,15 @@
           }
         ]
       }}
-  loop: "{{ eveng_downloaded_files | default([]) }}"
-  when: eveng_downloaded_files is defined
+  loop: "{{ eveng_images_downloaded_files | default([]) }}"
+  when: eveng_images_downloaded_files is defined
 
 - name: Normalise report files list
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_report_files: "{{ eveng_images_report_files | default([]) }}"
 
 - name: Build report document
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_report_document:
       run_at: "{{ eveng_images_run_at }}"
       host: "{{ inventory_hostname }}"
@@ -99,7 +99,7 @@
       files: "{{ eveng_images_report_files }}"
 
 - name: Compute report file paths
-  set_fact:
+  ansible.builtin.set_fact:
     eveng_images_report_run_path: >-
       {{ eveng_images_report_dir_controller }}/report-{{ inventory_hostname }}-{{ eveng_images_run_id }}.yml
     eveng_images_report_latest_host_path: >-
@@ -110,23 +110,23 @@
 - name: Write per-run report on controller
   delegate_to: localhost
   become: false
-  copy:
+  ansible.builtin.copy:
     dest: "{{ eveng_images_report_run_path }}"
-    mode: '0644'
+    mode: "0644"
     content: "{{ eveng_images_report_document | to_nice_yaml }}"
 
 - name: Write latest host report on controller
   delegate_to: localhost
   become: false
-  copy:
+  ansible.builtin.copy:
     dest: "{{ eveng_images_report_latest_host_path }}"
-    mode: '0644'
+    mode: "0644"
     content: "{{ eveng_images_report_document | to_nice_yaml }}"
 
 - name: Point latest.yml symlink at latest host report
   delegate_to: localhost
   become: false
-  file:
+  ansible.builtin.file:
     state: link
     src: "{{ eveng_images_report_latest_host_path }}"
     dest: "{{ eveng_images_report_latest_link_path }}"
@@ -135,11 +135,29 @@
 - name: Append summary line to controller log
   delegate_to: localhost
   become: false
-  lineinfile:
+  vars:
+    eveng_images_report_corrupt_files: >-
+      {{
+        eveng_images_report_files
+        | selectattr('status', 'equalto', 'corrupt')
+        | map(attribute='name')
+        | join(',')
+      }}
+  ansible.builtin.lineinfile:
     path: "{{ eveng_images_download_log }}"
     create: true
-    mode: '0644'
+    mode: "0644"
     insertafter: EOF
     line: >-
-      {{ eveng_images_run_at }} [{{ inventory_hostname }}] images={{ eveng_images_report_files | length }} corrupt={{ eveng_images_report_files | selectattr('status', 'equalto', 'corrupt') | list | length }} cache={{ eveng_images_cache_dir }} files={{ eveng_images_report_files | map(attribute='name') | join(',') }} corrupt_files={{ eveng_images_report_files | selectattr('status', 'equalto', 'corrupt') | map(attribute='name') | join(',') }}
+      {{ eveng_images_run_at }} [{{ inventory_hostname }}]
+      images={{ eveng_images_report_files | length }}
+      corrupt={{
+        eveng_images_report_files
+        | selectattr('status', 'equalto', 'corrupt')
+        | list
+        | length
+      }}
+      cache={{ eveng_images_cache_dir }}
+      files={{ eveng_images_report_files | map(attribute='name') | join(',') }}
+      corrupt_files={{ eveng_images_report_corrupt_files }}
   when: eveng_images_logging_enabled | default(true) | bool

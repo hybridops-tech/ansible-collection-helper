@@ -1,5 +1,5 @@
 # purpose: Smoke test eveng_labs role
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Smoke test EVE-NG labs deployment
   hosts: cicd_test

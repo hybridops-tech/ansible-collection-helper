@@ -1,13 +1,13 @@
 ---
 # purpose: Role metadata for netbox_seed
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 galaxy_info:
   role_name: netbox_seed
   namespace: hybridops
-  author: HybridOps.Studio
+  author: HybridOps.Tech
   description: >-
-    Orchestrate NetBox seeding on a control node using the HybridOps.Studio
+    Orchestrate NetBox seeding on a control node using the HybridOps.Tech
     helper pipeline (export -> ipam -> vms -> devices) with optional evidence
     capture.
   license: MIT-0

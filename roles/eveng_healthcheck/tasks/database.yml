@@ -1,6 +1,6 @@
 ---
 # purpose: Database health checks
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Check if EVE-NG database exists
   ansible.builtin.command: mysql -e "SHOW DATABASES LIKE 'eve_ng_db';"

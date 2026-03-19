@@ -1,6 +1,6 @@
 # purpose: Validate inputs and runtime prerequisites for netbox_seed on ctrl-01
 # adr: ADR-0002
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Guardrail - repo root required for real runs
   ansible.builtin.assert:

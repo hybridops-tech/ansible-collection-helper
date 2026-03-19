@@ -2,7 +2,7 @@
 
 `hybridops.helper` provides evidence collection and NetBox integration helpers. The scope is operational traceability and audit-friendly outputs, not platform-specific business logic.
 
-Design and release context is maintained in the HybridOps.Studio documentation site.
+Design and release context is maintained in the HybridOps.Tech documentation site.
 
 ## Contribution scope
 

@@ -1,6 +1,6 @@
 # purpose: Default settings for EVE-NG image deployment
 # Architecture Decision: ADR-XXXX
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 # Source selection
 eveng_images_source: url # url | local | remote

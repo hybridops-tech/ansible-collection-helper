@@ -1,6 +1,6 @@
 ---
 # purpose: Image health checks
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Find QEMU images
   ansible.builtin.find:

@@ -1,6 +1,6 @@
 ---
 # purpose: EVE-NG health check entry point
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Derive effective healthcheck settings
   ansible.builtin.set_fact:

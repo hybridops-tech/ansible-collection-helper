@@ -1,5 +1,5 @@
 # purpose: Orchestrate EVE-NG lab deployment
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Validate lab source
   ansible.builtin.assert:

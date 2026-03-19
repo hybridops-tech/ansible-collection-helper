@@ -1,6 +1,6 @@
 ---
 # purpose: API health checks
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Test API login endpoint
   ansible.builtin.uri:

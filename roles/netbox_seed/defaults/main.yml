@@ -1,6 +1,6 @@
 # purpose: Defaults for netbox_seed (ctrl-01 orchestration of NetBox seeding helpers)
 # adr: ADR-0002
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 # When true, run validation only and stop. Safe default for CI and first-time use.
 netbox_seed_smoke_only: true

@@ -1,5 +1,5 @@
 # purpose: Install staged labs into EVE-NG lab folders
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Ensure staging directory exists
   ansible.builtin.stat:

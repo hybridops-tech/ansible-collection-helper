@@ -1,6 +1,6 @@
 # file: roles/eveng_labs/defaults/main.yml
 # purpose: Default settings for EVE-NG lab deployment
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 eveng_labs_source: local # local | git | remote
 

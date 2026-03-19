@@ -1,6 +1,6 @@
 # purpose: Evidence capture for netbox_seed runs (ctrl-01 helper pipeline)
 # adr: ADR-0002
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Set run identifiers
   ansible.builtin.set_fact:

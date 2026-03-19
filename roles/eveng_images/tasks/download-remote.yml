@@ -1,5 +1,5 @@
 # purpose: Sync EVE-NG image files from a remote host into the local cache
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Validate remote configuration
   ansible.builtin.assert:

@@ -1,5 +1,5 @@
 # purpose: Install EVE-NG images from cache into the addons tree
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Discover installable files when metadata is not provided
   ansible.builtin.find:

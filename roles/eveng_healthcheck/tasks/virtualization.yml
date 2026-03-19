@@ -1,6 +1,6 @@
 ---
 # purpose: Virtualization health checks
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Check KVM module loaded
   ansible.builtin.command: lsmod

@@ -1,5 +1,5 @@
 # purpose: Remove labs matching exclusion patterns
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Find labs matching exclude patterns
   ansible.builtin.find:

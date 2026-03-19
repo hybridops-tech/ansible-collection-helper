@@ -1,5 +1,5 @@
 # purpose: Build per-run image report and controller logs for EVE-NG images
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Ensure run timestamp is set
   ansible.builtin.set_fact:

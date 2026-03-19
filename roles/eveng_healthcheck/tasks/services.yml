@@ -1,6 +1,6 @@
 ---
 # purpose: Service health checks
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Gather service facts
   ansible.builtin.service_facts:

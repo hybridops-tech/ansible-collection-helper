@@ -1,6 +1,6 @@
 ---
 # purpose: Defaults for eveng_healthcheck
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 eveng_healthcheck_level: basic
 eveng_healthcheck_fail_on_warning: false

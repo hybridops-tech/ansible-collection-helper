@@ -1,7 +1,7 @@
 ---
 # purpose: Seed NetBox via helper pipeline on ctrl-01 (export -> ipam -> vms -> devices)
 # adr: ADR-0002
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Validate inputs and prerequisites
   ansible.builtin.include_tasks: validate.yml

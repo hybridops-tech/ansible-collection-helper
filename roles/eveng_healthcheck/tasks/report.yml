@@ -1,6 +1,6 @@
 ---
 # purpose: Build and persist health check report output
-# maintainer: HybridOps.Studio
+# maintainer: HybridOps.Tech
 
 - name: Calculate overall health status
   ansible.builtin.set_fact:

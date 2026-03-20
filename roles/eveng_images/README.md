@@ -2,8 +2,6 @@
 
 **Purpose:** Standardized deployment and maintenance of EVE-NG image files (archives and raw images) for lab environments.  
 **Design reference:** ADR-XXXX (EVE-NG image management and verification model)  
-**Maintainer:** HybridOps.Tech
-
 ---
 
 ## 1. Overview
@@ -16,7 +14,7 @@ The role:
   - `remote` – remote file server accessed over SSH/rsync
 - Caches content on the EVE-NG host.
 - Installs images into `/opt/unetlab/addons/*` with predictable layouts.
-- Emits logs and reports suitable for verification, CI, and troubleshooting.
+- Emits logs and reports suitable for review, CI, and troubleshooting.
 
 Typical usage includes ad-hoc lab builds, CI smoke tests, and governed platform runs where image state and provenance require documentation.
 

@@ -1,13 +1,30 @@
 ---
-# purpose: Lab health checks
-# maintainer: HybridOps.Tech
+# Lab health checks
 
 - name: Find lab files
   ansible.builtin.find:
     paths: /opt/unetlab/labs
     patterns: "*.unl"
     recurse: true
-  register: eveng_healthcheck_lab_files
+  register: lab_files
+  tags:
+    - health_labs
+    - labs
+    - lab_files
+
+- name: Set lab count
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'labs': health_check_results.labs
+              | combine({'total_count': (lab_files.files | length)})
+            }
+          )
+      }}
+  changed_when: false
   tags:
     - health_labs
     - labs
@@ -18,12 +35,38 @@
     url: "http://{{ ansible_default_ipv4.address }}/api/labs"
     method: GET
     headers:
-      Cookie: "unetlab_session={{ eveng_healthcheck_session_cookie | default('') }}"
+      Cookie: "{{ api_auth.cookies_string | default('') }}"
     status_code: [200, 401]
     return_content: true
     validate_certs: false
-  register: eveng_healthcheck_api_labs_list
+  register: api_labs_list
   failed_when: false
+  changed_when: false
+  tags:
+    - health_labs
+    - labs
+    - lab_api
+
+- name: Set API lab count
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'labs': health_check_results.labs
+              | combine({'api_accessible': api_lab_count})
+            }
+          )
+      }}
+  vars:
+    api_lab_count: >-
+      {{
+        (api_labs_list.json.data | length)
+        if (api_labs_list.status == 200 and api_labs_list.json is defined and api_labs_list.json.data is defined)
+        else 0
+      }}
+  changed_when: false
   tags:
     - health_labs
     - labs
@@ -33,7 +76,9 @@
   ansible.builtin.shell: |
     set -o pipefail
     ps aux | grep -E 'qemu|dynamips' | grep -v grep | wc -l
-  register: eveng_healthcheck_running_nodes
+  args:
+    executable: /bin/bash
+  register: running_nodes
   changed_when: false
   failed_when: false
   tags:
@@ -41,9 +86,49 @@
     - labs
     - running_nodes
 
+- name: Set running nodes count
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'labs': health_check_results.labs
+              | combine({'running_nodes': (running_nodes.stdout | int)})
+            }
+          )
+      }}
+  changed_when: false
+  tags:
+    - health_labs
+    - labs
+    - running_nodes
+
 - name: Check tmp directory usage
-  ansible.builtin.shell: du -sh /opt/unetlab/tmp 2>/dev/null || echo "0"
-  register: eveng_healthcheck_tmp_usage
+  ansible.builtin.shell: |
+    du -sh /opt/unetlab/tmp 2>/dev/null || echo "0"
+  args:
+    executable: /bin/bash
+  register: tmp_usage
+  changed_when: false
+  failed_when: false
+  tags:
+    - health_labs
+    - labs
+    - tmp_usage
+
+- name: Set tmp directory status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'labs': health_check_results.labs
+              | combine({'tmp_usage': (tmp_usage.stdout.split()[0] | default('0'))})
+            }
+          )
+      }}
   changed_when: false
   tags:
     - health_labs
@@ -54,7 +139,9 @@
   ansible.builtin.shell: |
     set -o pipefail
     ps aux | grep -E 'qemu|dynamips' | grep -v grep | awk '{if ($8 == "Z") print $0}' | wc -l
-  register: eveng_healthcheck_zombie_processes
+  args:
+    executable: /bin/bash
+  register: zombie_procs
   changed_when: false
   failed_when: false
   tags:
@@ -62,47 +149,33 @@
     - labs
     - zombie_check
 
-- name: Update lab health results
+- name: Set zombie process count
   ansible.builtin.set_fact:
-    eveng_healthcheck_results: >-
+    health_check_results: >-
       {{
-        eveng_healthcheck_results
+        health_check_results
         | combine(
-          {
-            'labs': {
-              'total_count': eveng_healthcheck_lab_files.files | length,
-              'api_accessible': eveng_healthcheck_api_lab_count,
-              'running_nodes': eveng_healthcheck_running_nodes.stdout | int,
-              'tmp_usage': eveng_healthcheck_tmp_usage.stdout.split()[0] | default('0'),
-              'zombie_processes': eveng_healthcheck_zombie_processes.stdout | int
+            {
+              'labs': health_check_results.labs
+              | combine({'zombie_processes': (zombie_procs.stdout | int)})
             }
-          },
-          recursive=True
-        )
-      }}
-  vars:
-    eveng_healthcheck_api_lab_count: >-
-      {{
-        eveng_healthcheck_api_labs_list.json.data | length
-        if (
-          eveng_healthcheck_api_labs_list.status == 200 and
-          eveng_healthcheck_api_labs_list.json.data is defined
-        )
-        else 0
+          )
       }}
   changed_when: false
   tags:
     - health_labs
     - labs
+    - zombie_check
 
 - name: Labs health summary
   ansible.builtin.debug:
     msg:
-      - "Total labs: {{ eveng_healthcheck_results.labs.total_count }}"
-      - "Running nodes: {{ eveng_healthcheck_results.labs.running_nodes }}"
-      - "Temp usage: {{ eveng_healthcheck_results.labs.tmp_usage }}"
-      - "Zombie processes: {{ eveng_healthcheck_results.labs.zombie_processes | default(0) }}"
-  when: eveng_healthcheck_effective_report_format == 'detailed'
+      - "Total labs: {{ health_check_results.labs.total_count }}"
+      - "Running nodes: {{ health_check_results.labs.running_nodes }}"
+      - "Temp usage: {{ health_check_results.labs.tmp_usage }}"
+      - "Zombie processes: {{ health_check_results.labs.zombie_processes | default(0) }}"
+  when: health_check_report_format == "detailed"
+  changed_when: false
   tags:
     - health_labs
     - labs

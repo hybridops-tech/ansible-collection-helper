@@ -2,37 +2,37 @@
 # maintainer: HybridOps.Tech
 
 - name: Check local path exists on controller
-  ansible.builtin.stat:
+  stat:
     path: "{{ eveng_labs_local_path }}"
   delegate_to: localhost
   become: false
   register: eveng_labs_local_stat
 
 - name: Fail if local path does not exist
-  ansible.builtin.fail:
+  fail:
     msg: "Local path not found: {{ eveng_labs_local_path }}"
   when: not eveng_labs_local_stat.stat.exists
 
 - name: Clear staging directory on EVE host
-  ansible.builtin.file:
+  file:
     path: "{{ eveng_labs_staging_dir }}"
     state: absent
 
 - name: Recreate staging directory on EVE host
-  ansible.builtin.file:
+  file:
     path: "{{ eveng_labs_staging_dir }}"
     state: directory
-    mode: "0755"
+    mode: '0755'
 
 - name: Stage labs from local archive
-  ansible.builtin.unarchive:
+  unarchive:
     src: "{{ eveng_labs_local_path }}"
     dest: "{{ eveng_labs_staging_dir }}/"
     remote_src: false
   when: eveng_labs_local_stat.stat.isreg | default(false)
 
 - name: Stage labs from local directory
-  ansible.posix.synchronize:
+  synchronize:
     src: "{{ eveng_labs_local_path }}/"
     dest: "{{ eveng_labs_staging_dir }}/"
     rsync_opts: "{{ eveng_labs_sync_exclude_patterns | default([]) }}"

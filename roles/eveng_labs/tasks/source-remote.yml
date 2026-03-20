@@ -3,18 +3,18 @@
 # maintainer: HybridOps.Tech
 
 - name: Clear staging directory
-  ansible.builtin.file:
+  file:
     path: "{{ eveng_labs_staging_dir }}"
     state: absent
 
 - name: Recreate staging directory
-  ansible.builtin.file:
+  file:
     path: "{{ eveng_labs_staging_dir }}"
     state: directory
-    mode: "0755"
+    mode: '0755'
 
 - name: Stage labs from remote path
-  ansible.posix.synchronize:
+  synchronize:
     src: "{{ eveng_labs_remote_path }}/"
     dest: "{{ eveng_labs_staging_dir }}/"
     rsync_opts: "{{ eveng_labs_sync_exclude_patterns | default([]) }}"

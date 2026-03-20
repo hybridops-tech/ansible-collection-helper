@@ -1,31 +1,28 @@
-# file: roles/eveng_labs/defaults/main.yml
+---
 # purpose: Default settings for EVE-NG lab deployment
 # maintainer: HybridOps.Tech
 
-eveng_labs_source: local # local | git | remote
+eveng_labs_source: local  # local | git | remote
 
 # Local source
 eveng_labs_local_path: "{{ playbook_dir }}/../labs"
 
 # Git source
 eveng_labs_git_repo: ""
-eveng_labs_git_branch: main
+eveng_labs_git_branch: "main"
 
 # Remote source
-eveng_labs_remote_path: /mnt/nfs/eveng-labs
+eveng_labs_remote_path: "/mnt/nfs/eveng-labs"
 eveng_labs_remote_host: "{{ inventory_hostname }}"
 
 # Target folders under /opt/unetlab/labs
-eveng_labs_lab_folders: []
+eveng_lab_folders: []
 
 # Staging area on EVE-NG host
-eveng_labs_staging_dir: /tmp/eveng_labs_staging
+eveng_labs_staging_dir: "/tmp/eveng_labs_staging"
 
 # Exclusion patterns for student deployments
-eveng_labs_exclude_patterns: []
-
-# Install root on the EVE-NG host.
-eveng_labs_install_root: /opt/unetlab/labs
+eveng_exclude_patterns: []
 
 # Shared rsync exclude options
 eveng_labs_sync_exclude_patterns:

@@ -19,8 +19,9 @@ galaxy_info:
   galaxy_tags:
     - networking
     - eveng
+    - eve-ng
     - cisco
-    - automation
+    - network-automation
     - images
     - deployment
 

@@ -1,36 +1,49 @@
 ---
-# purpose: Build and persist health check report output
+# purpose: Generate EVE-NG healthcheck summary, persist optional reports, and fail on unhealthy runs.
 # maintainer: HybridOps.Tech
+
+- name: Set report rendering shortcuts
+  ansible.builtin.set_fact:
+    _svc: "{{ health_check_results.services | default({}) }}"
+    _svc_ports: "{{ (health_check_results.services | default({})).ports | default({}) }}"
+    _db: "{{ health_check_results.database | default({}) }}"
+    _db_crit: "{{ (health_check_results.database | default({})).critical_tables | default({}) }}"
+    _api: "{{ health_check_results.api | default({}) }}"
+    _api_auth: "{{ (health_check_results.api | default({})).authentication | default({}) }}"
+    _api_ep: "{{ (health_check_results.api | default({})).endpoints | default({}) }}"
+    _virt: "{{ health_check_results.virtualization | default({}) }}"
+    _imgs: "{{ health_check_results.images | default({}) }}"
+    _labs: "{{ health_check_results.labs | default({}) }}"
+  changed_when: false
+  run_once: true
 
 - name: Calculate overall health status
   ansible.builtin.set_fact:
-    eveng_healthcheck_overall_status: >-
+    overall_health: >-
       {{
-        'HEALTHY'
-        if (
-          eveng_healthcheck_results.services.apache.running | default(false) and
-          eveng_healthcheck_results.services.database.running | default(false) and
-          eveng_healthcheck_results.database.status | default('fail') == 'pass' and
-          eveng_healthcheck_results.api.status | default('fail') == 'pass' and
-          eveng_healthcheck_results.virtualization.status | default('none') in ['full', 'partial']
+        (
+          (_svc.apache.running | default(false))
+          and (_svc.database.running | default(false))
+          and (_db.status | default('fail') == 'pass')
+          and (_api.status | default('fail') == 'pass')
+          and ((_virt.status | default('none')) in ['full', 'partial'])
         )
-        else 'UNHEALTHY'
+        | ternary('HEALTHY', 'UNHEALTHY')
       }}
   changed_when: false
 
 - name: Update overall status
   ansible.builtin.set_fact:
-    eveng_healthcheck_results: >-
+    health_check_results: >-
       {{
-        eveng_healthcheck_results
+        health_check_results
         | combine(
-          {
-            'overall_status': eveng_healthcheck_overall_status,
-            'timestamp': ansible_date_time.iso8601,
-            'hostname': inventory_hostname
-          },
-          recursive=True
-        )
+            {
+              'overall_status': overall_health,
+              'timestamp': ansible_date_time.iso8601,
+              'hostname': inventory_hostname
+            }
+          )
       }}
   changed_when: false
 
@@ -40,246 +53,299 @@
     state: directory
     mode: "0755"
   loop:
-    - "{{ eveng_healthcheck_effective_output_dir }}"
-    - "{{ eveng_healthcheck_effective_reports_dir }}"
+    - "{{ health_check_output_dir }}"
+    - "{{ health_check_reports_dir }}"
   delegate_to: localhost
   become: false
   run_once: true
-  when: eveng_healthcheck_effective_save_output | bool
+  when: health_check_save_output | bool
 
 - name: Display summary report
-  vars:
-    eveng_healthcheck_summary_virt: >-
-      {{ eveng_healthcheck_results.virtualization | default({}) }}
   ansible.builtin.debug:
     msg:
       - "EVE-NG Health Check Report"
       - "Host: {{ inventory_hostname }}"
       - "Timestamp: {{ ansible_date_time.iso8601 }}"
-      - "Overall Status: {{ eveng_healthcheck_overall_status }}"
+      - "Overall Status: {{ overall_health }}"
       - ""
       - "Services:"
       - >-
-        Apache:
-        {{ 'Running' if eveng_healthcheck_results.services.apache.running | default(false) else 'Stopped' }}
+        Apache: {{
+          'Running'
+          if (_svc.apache.running | default(false))
+          else 'Stopped'
+        }}
       - >-
-        MySQL:
-        {{ 'Running' if eveng_healthcheck_results.services.database.running | default(false) else 'Stopped' }}
+        MySQL: {{
+          'Running'
+          if (_svc.database.running | default(false))
+          else 'Stopped'
+        }}
       - >-
-        Ports:
-        {{ 'OK' if eveng_healthcheck_results.services.ports.apache | default(false) else 'FAIL' }}
+        Ports: {{
+          'OK'
+          if (_svc_ports.apache | default(false))
+          else 'FAIL'
+        }}
       - ""
       - "Database:"
-      - "Status: {{ eveng_healthcheck_results.database.status | default('unknown') | upper }}"
-      - "Tables: {{ eveng_healthcheck_results.database.table_count | default(0) }}"
       - >-
-        Admin User:
-        {{ 'EXISTS' if eveng_healthcheck_results.database.admin_user_exists | default(false) else 'MISSING' }}
+        Status: {{
+          _db.status
+          | default('unknown')
+          | upper
+        }}
+      - "Tables: {{ _db.table_count | default(0) }}"
+      - >-
+        Admin User: {{
+          'EXISTS'
+          if (_db.admin_user_exists | default(false))
+          else 'MISSING'
+        }}
       - ""
       - "API:"
-      - "Status: {{ eveng_healthcheck_results.api.status | default('unknown') | upper }}"
       - >-
-        Reachable:
-        {{ 'YES' if eveng_healthcheck_results.api.reachable | default(false) else 'NO' }}
+        Status: {{
+          _api.status
+          | default('unknown')
+          | upper
+        }}
       - >-
-        Authentication:
-        {{ 'OK' if eveng_healthcheck_results.api.authentication.success | default(false) else 'FAIL' }}
+        Reachable: {{
+          'YES'
+          if (_api.reachable | default(false))
+          else 'NO'
+        }}
       - >-
-        Login:
-        {{ 'OK' if eveng_healthcheck_results.api.endpoints.login | default(false) else 'FAIL' }}
+        Authentication: {{
+          'OK'
+          if (_api_auth.success | default(false))
+          else 'FAIL'
+        }}
       - >-
-        Status Endpoint:
-        {{ 'OK' if eveng_healthcheck_results.api.endpoints.status | default(false) else 'FAIL' }}
+        Login: {{
+          'OK'
+          if (_api_ep.login | default(false))
+          else 'FAIL'
+        }}
       - >-
-        Folders Endpoint:
-        {{ 'OK' if eveng_healthcheck_results.api.endpoints.folders | default(false) else 'FAIL' }}
+        Status Endpoint: {{
+          'OK'
+          if (_api_ep.status | default(false))
+          else 'FAIL'
+        }}
+      - >-
+        Folders Endpoint: {{
+          'OK'
+          if (_api_ep.folders | default(false))
+          else 'FAIL'
+        }}
       - ""
       - "Virtualization:"
       - >-
-        Status:
-        {{ eveng_healthcheck_results.virtualization.status | default('unknown') | upper }}
+        Status: {{
+          _virt.status
+          | default('unknown')
+          | upper
+        }}
       - >-
-        KVM Module:
-        {{ 'LOADED' if eveng_healthcheck_results.virtualization.kvm_module_loaded | default(false) else 'NOT LOADED' }}
+        KVM Module: {{
+          'LOADED'
+          if (_virt.kvm_module_loaded | default(false))
+          else 'NOT LOADED'
+        }}
       - >-
-        KVM Device:
-        {{ 'EXISTS' if eveng_healthcheck_results.virtualization.kvm_device_exists | default(false) else 'MISSING' }}
+        KVM Device: {{
+          'EXISTS'
+          if (_virt.kvm_device_exists | default(false))
+          else 'MISSING'
+        }}
       - >-
-        CPU Virtualization:
-        {{ 'SUPPORTED' if eveng_healthcheck_summary_virt.cpu_virt_supported | default(false) else 'NOT SUPPORTED' }}
-  when: eveng_healthcheck_effective_report_format == 'summary'
+        CPU Virtualization: {{
+          'SUPPORTED'
+          if (_virt.cpu_virt_supported | default(false))
+          else 'NOT SUPPORTED'
+        }}
+  when: health_check_report_format == "summary"
 
 - name: Save JSON report
   ansible.builtin.copy:
-    content: "{{ eveng_healthcheck_results | to_nice_json }}"
-    dest: >-
-      {{ eveng_healthcheck_effective_output_dir }}/
-      {{ ansible_date_time.iso8601_basic_short }}_{{ inventory_hostname }}_healthcheck.json
+    content: "{{ health_check_results | to_nice_json }}"
+    dest: "{{ health_check_output_dir }}/{{ _healthcheck_json_name }}"
     mode: "0644"
+  vars:
+    _healthcheck_json_name: >-
+      {{ ansible_date_time.iso8601_basic_short }}_{{ inventory_hostname }}_healthcheck.json
   delegate_to: localhost
   become: false
-  when: eveng_healthcheck_effective_save_output | bool
+  when: health_check_save_output | bool
 
 - name: Save latest JSON report
   ansible.builtin.copy:
-    content: "{{ eveng_healthcheck_results | to_nice_json }}"
-    dest: >-
-      {{ eveng_healthcheck_effective_output_dir }}/latest_{{ inventory_hostname }}_healthcheck.json
+    content: "{{ health_check_results | to_nice_json }}"
+    dest: "{{ health_check_output_dir }}/latest_{{ inventory_hostname }}_healthcheck.json"
     mode: "0644"
   delegate_to: localhost
   become: false
-  when: eveng_healthcheck_effective_save_output | bool
+  when: health_check_save_output | bool
 
 - name: Generate text report
-  vars:
-    eveng_healthcheck_text_services: >-
-      {{ eveng_healthcheck_results.services | default({}) }}
-    eveng_healthcheck_text_database: >-
-      {{ eveng_healthcheck_results.database | default({}) }}
-    eveng_healthcheck_text_api: >-
-      {{ eveng_healthcheck_results.api | default({}) }}
-    eveng_healthcheck_text_virtualization: >-
-      {{ eveng_healthcheck_results.virtualization | default({}) }}
-    eveng_healthcheck_text_images: >-
-      {{ eveng_healthcheck_results.images | default({}) }}
-    eveng_healthcheck_text_labs: >-
-      {{ eveng_healthcheck_results.labs | default({}) }}
   ansible.builtin.copy:
-    content: |-
-      {{
-        (
-          [
-          'EVE-NG Health Check Report',
-          'Host: ' ~ inventory_hostname,
-          'Timestamp: ' ~ ansible_date_time.iso8601,
-          'Overall Status: ' ~ eveng_healthcheck_overall_status,
-          '',
-          'Services:',
-          'Apache: '
-            ~ ('Running' if eveng_healthcheck_text_services.apache.running | default(false) else 'Stopped')
-            ~ ' ('
-            ~ ('Enabled' if eveng_healthcheck_text_services.apache.enabled | default(false) else 'Disabled')
-            ~ ')',
-          'MySQL: '
-            ~ ('Running' if eveng_healthcheck_text_services.database.running | default(false) else 'Stopped')
-            ~ ' ('
-            ~ ('Enabled' if eveng_healthcheck_text_services.database.enabled | default(false) else 'Disabled')
-            ~ ')',
-          'Port 80: '
-            ~ ('Open' if eveng_healthcheck_text_services.ports.apache | default(false) else 'Closed'),
-          'Port 3306: '
-            ~ ('Open' if eveng_healthcheck_text_services.ports.mysql | default(false) else 'Closed'),
-          '',
-          'Database:',
-          'Status: ' ~ (eveng_healthcheck_text_database.status | default('unknown') | upper),
-          'Tables: ' ~ (eveng_healthcheck_text_database.table_count | default(0) | string),
-          'Admin User: '
-            ~ ('EXISTS' if eveng_healthcheck_text_database.admin_user_exists | default(false) else 'MISSING'),
-          'Critical Tables:',
-          '  - users: '
-            ~ ('OK' if eveng_healthcheck_text_database.critical_tables.users | default(false) else 'MISSING'),
-          '  - pods: '
-            ~ ('OK' if eveng_healthcheck_text_database.critical_tables.pods | default(false) else 'MISSING'),
-          '  - html5: '
-            ~ ('OK' if eveng_healthcheck_text_database.critical_tables.html5 | default(false) else 'MISSING'),
-          '',
-          'API:',
-          'Status: ' ~ (eveng_healthcheck_text_api.status | default('unknown') | upper),
-          'Reachable: '
-            ~ ('YES' if eveng_healthcheck_text_api.reachable | default(false) else 'NO'),
-          'Authentication: '
-            ~ ('SUCCESS' if eveng_healthcheck_text_api.authentication.success | default(false) else 'FAILED'),
-          'Endpoints:',
-          '  - Login: '
-            ~ ('OK' if eveng_healthcheck_text_api.endpoints.login | default(false) else 'FAIL'),
-          '  - Status: '
-            ~ ('OK' if eveng_healthcheck_text_api.endpoints.status | default(false) else 'FAIL'),
-          '  - Folders: '
-            ~ ('OK' if eveng_healthcheck_text_api.endpoints.folders | default(false) else 'FAIL'),
-          '',
-          'Virtualization:',
-          'Status: ' ~ (eveng_healthcheck_text_virtualization.status | default('unknown') | upper),
-          'KVM Module: '
-            ~ ('LOADED' if eveng_healthcheck_text_virtualization.kvm_module_loaded | default(false) else 'NOT LOADED'),
-          'KVM Device: '
-            ~ ('EXISTS' if eveng_healthcheck_text_virtualization.kvm_device_exists | default(false) else 'MISSING'),
-          'CPU Support: '
-            ~ ('YES' if eveng_healthcheck_text_virtualization.cpu_virt_supported | default(false) else 'NO'),
-          'Directories:',
-          '  - QEMU: '
-            ~ ('OK' if eveng_healthcheck_text_virtualization.qemu_dir_exists | default(false) else 'MISSING'),
-          '  - IOL: '
-            ~ ('OK' if eveng_healthcheck_text_virtualization.iol_dir_exists | default(false) else 'MISSING')
-          ]
-          + (
-            (eveng_healthcheck_effective_level in ['images', 'full'])
-            | ternary(
-              [
-                '',
-                'Images:',
-                'QEMU: ' ~ (eveng_healthcheck_text_images.qemu_count | default(0) | string),
-                'IOL: ' ~ (eveng_healthcheck_text_images.iol_count | default(0) | string),
-                'Dynamips: ' ~ (eveng_healthcheck_text_images.dynamips_count | default(0) | string)
-              ],
-              []
-            )
-          )
-          + (
-            (eveng_healthcheck_effective_level == 'full')
-            | ternary(
-              [
-                '',
-                'Labs:',
-                'Total Labs: ' ~ (eveng_healthcheck_text_labs.total_count | default(0) | string),
-                'Running Nodes: ' ~ (eveng_healthcheck_text_labs.running_nodes | default(0) | string),
-                'Temp Usage: ' ~ (eveng_healthcheck_text_labs.tmp_usage | default('Unknown'))
-              ],
-              []
-            )
-          )
-        )
-        | join('\n')
+    content: |
+      EVE-NG Health Check Report
+      Host: {{ inventory_hostname }}
+      Timestamp: {{ ansible_date_time.iso8601 }}
+      Overall Status: {{ overall_health }}
+
+      Services:
+      Apache: {{
+        'Running'
+        if (_svc.apache.running | default(false))
+        else 'Stopped'
       }}
-    dest: >-
-      {{ eveng_healthcheck_effective_reports_dir }}/
-      {{ ansible_date_time.iso8601_basic_short }}_{{ inventory_hostname }}_health_report.txt
+      ({{ 'Enabled' if (_svc.apache.enabled | default(false)) else 'Disabled' }})
+
+      MySQL: {{
+        'Running'
+        if (_svc.database.running | default(false))
+        else 'Stopped'
+      }}
+      ({{ 'Enabled' if (_svc.database.enabled | default(false)) else 'Disabled' }})
+
+      Port 80: {{
+        'Open'
+        if (_svc_ports.apache | default(false))
+        else 'Closed'
+      }}
+      Port 443: {{
+        'Open'
+        if (_svc_ports.mysql | default(false))
+        else 'Closed'
+      }}
+
+      Database:
+      Status: {{ _db.status | default('unknown') | upper }}
+      Tables: {{ _db.table_count | default(0) }}
+      Admin User: {{
+        'EXISTS'
+        if (_db.admin_user_exists | default(false))
+        else 'MISSING'
+      }}
+      Critical Tables:
+        - users: {{
+            'OK'
+            if (_db_crit.users | default(false))
+            else 'MISSING'
+          }}
+        - pods: {{
+            'OK'
+            if (_db_crit.pods | default(false))
+            else 'MISSING'
+          }}
+        - html5: {{
+            'OK'
+            if (_db_crit.html5 | default(false))
+            else 'MISSING'
+          }}
+
+      API:
+      Status: {{ _api.status | default('unknown') | upper }}
+      Reachable: {{
+        'YES'
+        if (_api.reachable | default(false))
+        else 'NO'
+      }}
+      Authentication: {{
+        'SUCCESS'
+        if (_api_auth.success | default(false))
+        else 'FAILED'
+      }}
+      Endpoints:
+        - Login: {{
+            'OK'
+            if (_api_ep.login | default(false))
+            else 'FAIL'
+          }}
+        - Status: {{
+            'OK'
+            if (_api_ep.status | default(false))
+            else 'FAIL'
+          }}
+        - Folders: {{
+            'OK'
+            if (_api_ep.folders | default(false))
+            else 'FAIL'
+          }}
+
+      Virtualization:
+      Status: {{ _virt.status | default('unknown') | upper }}
+      KVM Module: {{
+        'LOADED'
+        if (_virt.kvm_module_loaded | default(false))
+        else 'NOT LOADED'
+      }}
+      KVM Device: {{
+        'EXISTS'
+        if (_virt.kvm_device_exists | default(false))
+        else 'MISSING'
+      }}
+      CPU Support: {{
+        'YES'
+        if (_virt.cpu_virt_supported | default(false))
+        else 'NO'
+      }}
+      Directories:
+        - QEMU: {{
+            'OK'
+            if (_virt.qemu_dir_exists | default(false))
+            else 'MISSING'
+          }}
+        - IOL: {{
+            'OK'
+            if (_virt.iol_dir_exists | default(false))
+            else 'MISSING'
+          }}
+
+      {% if health_check_level in ['images', 'full'] %}
+      Images:
+      QEMU: {{ _imgs.qemu_count | default(0) }}
+      IOL: {{ _imgs.iol_count | default(0) }}
+      Dynamips: {{ _imgs.dynamips_count | default(0) }}
+      {% endif %}
+
+      {% if health_check_level == 'full' %}
+      Labs:
+      Total Labs: {{ _labs.total_labs | default(0) }}
+      Running Nodes: {{ _labs.running_nodes | default(0) }}
+      Temp Usage: {{ _labs.tmp_usage | default('Unknown') }}
+      {% endif %}
+    dest: "{{ health_check_reports_dir }}/{{ _healthcheck_txt_name }}"
     mode: "0644"
+  vars:
+    _healthcheck_txt_name: >-
+      {{ ansible_date_time.iso8601_basic_short }}_{{ inventory_hostname }}_health_report.txt
   delegate_to: localhost
   become: false
   when:
-    - eveng_healthcheck_effective_save_output | bool
-    - eveng_healthcheck_effective_report_format in ['summary', 'detailed']
+    - health_check_save_output | bool
+    - health_check_report_format in ["summary", "detailed"]
 
 - name: Display report locations
-  vars:
-    eveng_healthcheck_json_report_path: >-
-      {{
-        eveng_healthcheck_effective_output_dir ~ '/' ~
-        ansible_date_time.iso8601_basic_short ~ '_' ~ inventory_hostname ~ '_healthcheck.json'
-      }}
-    eveng_healthcheck_latest_report_path: >-
-      {{ eveng_healthcheck_effective_output_dir ~ '/latest_' ~ inventory_hostname ~ '_healthcheck.json' }}
-    eveng_healthcheck_text_report_path: >-
-      {{
-        eveng_healthcheck_effective_reports_dir ~ '/' ~
-        ansible_date_time.iso8601_basic_short ~ '_' ~ inventory_hostname ~ '_health_report.txt'
-      }}
   ansible.builtin.debug:
     msg:
-      - >-
-        JSON:
-        {{ eveng_healthcheck_json_report_path }}
-      - >-
-        Latest:
-        {{ eveng_healthcheck_latest_report_path }}
-      - >-
-        Report:
-        {{ eveng_healthcheck_text_report_path }}
-  when: eveng_healthcheck_effective_save_output | bool
+      - "JSON: {{ health_check_output_dir }}/{{ _healthcheck_json_name }}"
+      - "Latest: {{ health_check_output_dir }}/latest_{{ inventory_hostname }}_healthcheck.json"
+      - "Report: {{ health_check_reports_dir }}/{{ _healthcheck_txt_name }}"
+  vars:
+    _healthcheck_json_name: >-
+      {{ ansible_date_time.iso8601_basic_short }}_{{ inventory_hostname }}_healthcheck.json
+    _healthcheck_txt_name: >-
+      {{ ansible_date_time.iso8601_basic_short }}_{{ inventory_hostname }}_health_report.txt
+  when: health_check_save_output | bool
 
 - name: Fail if health check failed
   ansible.builtin.fail:
     msg: "EVE-NG health check failed"
   when:
-    - eveng_healthcheck_effective_fail_on_warning | bool
-    - eveng_healthcheck_overall_status == 'UNHEALTHY'
+    - health_check_fail_on_warning | bool
+    - overall_health == "UNHEALTHY"

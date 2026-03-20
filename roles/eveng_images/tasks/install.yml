@@ -1,3 +1,4 @@
+---
 # purpose: Install EVE-NG images from cache into the addons tree
 # maintainer: HybridOps.Tech
 
@@ -13,24 +14,24 @@
       - "*.img"
       - "*.bin"
     recurse: false
-  register: eveng_images_install_files
-  when: eveng_images_downloaded_files is not defined
+  register: install_files
+  when: eveng_downloaded_files is not defined
 
 - name: Use previously discovered download metadata when available
   ansible.builtin.set_fact:
-    eveng_images_install_files:
-      files: "{{ eveng_images_downloaded_files }}"
-  when: eveng_images_downloaded_files is defined
+    install_files:
+      files: "{{ eveng_downloaded_files }}"
+  when: eveng_downloaded_files is defined
+  changed_when: false
 
 - name: Fail when there is nothing to install
   ansible.builtin.fail:
     msg: "No archives or images found to install in {{ eveng_images_cache_dir }}"
-  when: eveng_images_install_files.files | length == 0
+  when: (install_files.files | default([]) | length) == 0
 
 - name: Detect type for each file
   ansible.builtin.shell: |
-    set -o pipefail
-    set -e
+    set -euo pipefail
     ARCHIVE="{{ item.path }}"
     BASENAME="$(basename "$ARCHIVE")"
     EXT="${BASENAME##*.}"
@@ -58,7 +59,7 @@
     esac
     {% endif %}
 
-    if [[ "$EXT" = "tar.gz" ]] || [[ "$EXT" = "tgz" ]] || [[ "$EXT" = "zip" ]] || [[ "$EXT" = "gz" ]]; then
+    if [[ "$BASENAME" == *.tar.gz || "$EXT" == "tgz" || "$EXT" == "zip" || "$EXT" == "gz" ]]; then
       if ! LIST_OUTPUT="$(tar -tzf "$ARCHIVE" 2>&1 | head -1)"; then
         echo "invalid"
         exit 0
@@ -66,7 +67,7 @@
 
       FIRST_DIR="$(printf '%s\n' "$LIST_OUTPUT" | cut -d'/' -f1)"
 
-      if [ "$FIRST_DIR" = "iol" ] || [ "$FIRST_DIR" = "qemu" ] || [ "$FIRST_DIR" = "dynamips" ]; then
+      if [[ "$FIRST_DIR" == "iol" || "$FIRST_DIR" == "qemu" || "$FIRST_DIR" == "dynamips" ]]; then
         echo "structured:$FIRST_DIR"
         exit 0
       fi
@@ -78,8 +79,8 @@
     echo "qemu"
   args:
     executable: /bin/bash
-  loop: "{{ eveng_images_install_files.files }}"
+  loop: "{{ install_files.files | default([]) }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  register: eveng_images_detected_types
+  register: detected_types
   changed_when: false

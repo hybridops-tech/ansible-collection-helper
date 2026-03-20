@@ -1,12 +1,31 @@
 ---
-# purpose: Virtualization health checks
-# maintainer: HybridOps.Tech
+# Virtualization health checks
 
 - name: Check KVM module loaded
   ansible.builtin.command: lsmod
-  register: eveng_healthcheck_lsmod_output
+  register: lsmod_output
   changed_when: false
   failed_when: false
+  tags:
+    - health_virtualization
+    - virtualization
+    - kvm
+    - kvm_module
+
+- name: Set KVM module status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'virtualization': health_check_results.virtualization
+              | combine({'kvm_module_loaded': kvm_loaded})
+            }
+          )
+      }}
+  vars:
+    kvm_loaded: "{{ 'kvm' in lsmod_output.stdout }}"
   tags:
     - health_virtualization
     - virtualization
@@ -16,7 +35,25 @@
 - name: Check KVM device exists
   ansible.builtin.stat:
     path: /dev/kvm
-  register: eveng_healthcheck_kvm_device
+  register: kvm_device
+  tags:
+    - health_virtualization
+    - virtualization
+    - kvm
+    - kvm_device
+
+- name: Set KVM device status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'virtualization': health_check_results.virtualization
+              | combine({'kvm_device_exists': kvm_device.stat.exists})
+            }
+          )
+      }}
   tags:
     - health_virtualization
     - virtualization
@@ -24,10 +61,29 @@
     - kvm_device
 
 - name: Check CPU virtualization support
-  ansible.builtin.command: grep -E '(vmx|svm)' /proc/cpuinfo
-  register: eveng_healthcheck_cpu_virt
+  ansible.builtin.command: "grep -E '(vmx|svm)' /proc/cpuinfo"
+  register: cpu_virt
   changed_when: false
   failed_when: false
+  tags:
+    - health_virtualization
+    - virtualization
+    - cpu_virt
+
+- name: Set CPU virtualization status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'virtualization': health_check_results.virtualization
+              | combine({'cpu_virt_supported': cpu_has_virt})
+            }
+          )
+      }}
+  vars:
+    cpu_has_virt: "{{ cpu_virt.rc == 0 }}"
   tags:
     - health_virtualization
     - virtualization
@@ -36,7 +92,24 @@
 - name: Check QEMU directory exists
   ansible.builtin.stat:
     path: /opt/unetlab/addons/qemu
-  register: eveng_healthcheck_qemu_dir
+  register: qemu_dir
+  tags:
+    - health_virtualization
+    - virtualization
+    - qemu
+
+- name: Set QEMU directory status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'virtualization': health_check_results.virtualization
+              | combine({'qemu_dir_exists': qemu_dir.stat.exists})
+            }
+          )
+      }}
   tags:
     - health_virtualization
     - virtualization
@@ -45,42 +118,51 @@
 - name: Check IOL directory exists
   ansible.builtin.stat:
     path: /opt/unetlab/addons/iol
-  register: eveng_healthcheck_iol_dir
+  register: iol_dir
   tags:
     - health_virtualization
     - virtualization
     - iol
 
-- name: Update virtualization health results
+- name: Set IOL directory status
   ansible.builtin.set_fact:
-    eveng_healthcheck_results: >-
+    health_check_results: >-
       {{
-        eveng_healthcheck_results
+        health_check_results
         | combine(
-          {
-            'virtualization': {
-              'kvm_module_loaded': 'kvm' in eveng_healthcheck_lsmod_output.stdout,
-              'kvm_device_exists': eveng_healthcheck_kvm_device.stat.exists,
-              'cpu_virt_supported': eveng_healthcheck_cpu_virt.rc == 0,
-              'qemu_dir_exists': eveng_healthcheck_qemu_dir.stat.exists,
-              'iol_dir_exists': eveng_healthcheck_iol_dir.stat.exists,
-              'status': eveng_healthcheck_virtualization_status
+            {
+              'virtualization': health_check_results.virtualization
+              | combine({'iol_dir_exists': iol_dir.stat.exists})
             }
-          },
-          recursive=True
-        )
+          )
+      }}
+  tags:
+    - health_virtualization
+    - virtualization
+    - iol
+
+- name: Set overall virtualization status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'virtualization': health_check_results.virtualization
+              | combine({'status': virt_status})
+            }
+          )
       }}
   vars:
-    eveng_healthcheck_virtualization_status: >-
+    virt_status: >-
       {{
         'full'
         if (
-          ('kvm' in eveng_healthcheck_lsmod_output.stdout) and
-          eveng_healthcheck_kvm_device.stat.exists
+          health_check_results.virtualization.kvm_module_loaded
+          and health_check_results.virtualization.kvm_device_exists
         )
         else 'limited'
       }}
-  changed_when: false
   tags:
     - health_virtualization
     - virtualization
@@ -89,16 +171,25 @@
   ansible.builtin.debug:
     msg:
       - >-
-        KVM module:
-        {{ 'Loaded' if eveng_healthcheck_results.virtualization.kvm_module_loaded else 'Not loaded' }}
+        KVM module: {{
+          'Loaded'
+          if health_check_results.virtualization.kvm_module_loaded
+          else 'Not loaded'
+        }}
       - >-
-        KVM device:
-        {{ 'Present' if eveng_healthcheck_results.virtualization.kvm_device_exists else 'Missing' }}
+        KVM device: {{
+          'Present'
+          if health_check_results.virtualization.kvm_device_exists
+          else 'Missing'
+        }}
       - >-
-        CPU support:
-        {{ 'Yes' if eveng_healthcheck_results.virtualization.cpu_virt_supported else 'No' }}
-      - "Status: {{ eveng_healthcheck_results.virtualization.status }}"
-  when: eveng_healthcheck_effective_report_format == 'detailed'
+        CPU support: {{
+          'Yes'
+          if health_check_results.virtualization.cpu_virt_supported
+          else 'No'
+        }}
+      - "Status: {{ health_check_results.virtualization.status }}"
+  when: health_check_report_format == 'detailed'
   tags:
     - health_virtualization
     - virtualization

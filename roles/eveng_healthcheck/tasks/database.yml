@@ -1,134 +1,156 @@
----
-# purpose: Database health checks
+# purpose: Database health checks for eveng_healthcheck
 # maintainer: HybridOps.Tech
-
+---
 - name: Check if EVE-NG database exists
   ansible.builtin.command: mysql -e "SHOW DATABASES LIKE 'eve_ng_db';"
-  register: eveng_healthcheck_db_exists
+  register: db_exists
   changed_when: false
   failed_when: false
   tags:
     - health_database
     - db_check
 
+- name: Verify database exists
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {'database': health_check_results.database | combine({'exists': db_present})},
+            recursive=True
+          )
+      }}
+  vars:
+    db_present: "{{ 'eve_ng_db' in db_exists.stdout }}"
+  tags:
+    - health_database
+
 - name: Count database tables
   ansible.builtin.command: >-
     mysql eve_ng_db -e
     "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='eve_ng_db';"
-  register: eveng_healthcheck_table_count
+  register: table_count
   changed_when: false
   failed_when: false
-  when: "'eve_ng_db' in eveng_healthcheck_db_exists.stdout"
+  when: "'eve_ng_db' in db_exists.stdout"
+  tags:
+    - health_database
+    - db_tables
+
+- name: Set table count
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {'database': health_check_results.database | combine({'table_count': tables})},
+            recursive=True
+          )
+      }}
+  vars:
+    tables: "{{ table_count.stdout_lines[-1] if (table_count.stdout_lines | length) > 0 else '0' }}"
+  when: "'eve_ng_db' in db_exists.stdout"
   tags:
     - health_database
     - db_tables
 
 - name: Check critical tables exist
-  ansible.builtin.command: >-
-    mysql eve_ng_db -e "SHOW TABLES LIKE '{{ item }}';"
-  register: eveng_healthcheck_table_check
+  ansible.builtin.command: mysql eve_ng_db -e "SHOW TABLES LIKE '{{ item }}';"
+  register: table_check
   changed_when: false
   failed_when: false
   loop:
     - users
     - pods
     - html5
-  when: "'eve_ng_db' in eveng_healthcheck_db_exists.stdout"
+  when: "'eve_ng_db' in db_exists.stdout"
+  tags:
+    - health_database
+    - db_tables
+
+- name: Set critical tables status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {'database': health_check_results.database | combine({'critical_tables': tables_present})},
+            recursive=True
+          )
+      }}
+  vars:
+    tables_present:
+      users: "{{ 'users' in table_check.results[0].stdout }}"
+      pods: "{{ 'pods' in table_check.results[1].stdout }}"
+      html5: "{{ 'html5' in table_check.results[2].stdout }}"
+  when: "'eve_ng_db' in db_exists.stdout"
   tags:
     - health_database
     - db_tables
 
 - name: Check admin user exists
-  ansible.builtin.command: >-
-    mysql eve_ng_db -e "SELECT COUNT(*) FROM users WHERE username='admin';"
-  register: eveng_healthcheck_admin_check
+  ansible.builtin.command: mysql eve_ng_db -e "SELECT COUNT(*) FROM users WHERE username='admin';"
+  register: admin_check
   changed_when: false
   failed_when: false
-  when: "'eve_ng_db' in eveng_healthcheck_db_exists.stdout"
+  when: "'eve_ng_db' in db_exists.stdout"
   tags:
     - health_database
     - db_users
 
-- name: Update database health results
+- name: Set admin user status
   ansible.builtin.set_fact:
-    eveng_healthcheck_results: >-
+    health_check_results: >-
       {{
-        eveng_healthcheck_results
+        health_check_results
         | combine(
-          {
-            'database': {
-              'exists': 'eve_ng_db' in eveng_healthcheck_db_exists.stdout,
-              'table_count': eveng_healthcheck_database_table_count,
-              'critical_tables': eveng_healthcheck_database_critical_tables,
-              'admin_user_exists': eveng_healthcheck_database_admin_present,
-              'status': eveng_healthcheck_database_status
-            }
-          },
-          recursive=True
-        )
+            {'database': health_check_results.database | combine({'admin_user_exists': admin_present})},
+            recursive=True
+          )
       }}
   vars:
-    eveng_healthcheck_database_table_count: >-
+    admin_present: >-
       {{
-        eveng_healthcheck_table_count.stdout_lines[-1]
-        if (
-          eveng_healthcheck_table_count is defined and
-          eveng_healthcheck_table_count.stdout_lines | length > 0
-        )
-        else '0'
-      }}
-    eveng_healthcheck_database_critical_tables:
-      users: >-
-        {{
-          eveng_healthcheck_table_check.results[0].stdout is search('users')
-          if eveng_healthcheck_table_check is defined
-          else false
-        }}
-      pods: >-
-        {{
-          eveng_healthcheck_table_check.results[1].stdout is search('pods')
-          if eveng_healthcheck_table_check is defined
-          else false
-        }}
-      html5: >-
-        {{
-          eveng_healthcheck_table_check.results[2].stdout is search('html5')
-          if eveng_healthcheck_table_check is defined
-          else false
-        }}
-    eveng_healthcheck_database_admin_present: >-
-      {{
-        (
-          eveng_healthcheck_admin_check.stdout_lines[-1] | int > 0
-        )
-        if (
-          eveng_healthcheck_admin_check is defined and
-          eveng_healthcheck_admin_check.stdout_lines | length > 0
-        )
+        (admin_check.stdout_lines[-1] | int) > 0
+        if (admin_check.stdout_lines | length) > 0
         else false
       }}
-    eveng_healthcheck_database_status: >-
+  when: "'eve_ng_db' in db_exists.stdout"
+  tags:
+    - health_database
+    - db_users
+
+- name: Set database status
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {'database': health_check_results.database | combine({'status': db_status})},
+            recursive=True
+          )
+      }}
+  vars:
+    db_status: >-
       {{
         'pass'
         if (
-          ('eve_ng_db' in eveng_healthcheck_db_exists.stdout) and
-          (eveng_healthcheck_database_table_count | int >= 3) and
-          eveng_healthcheck_database_admin_present
+          health_check_results.database.exists
+          and ((health_check_results.database.table_count | int) >= 3)
+          and health_check_results.database.admin_user_exists
         )
         else 'fail'
       }}
-  changed_when: false
   tags:
     - health_database
 
 - name: Database health summary
   ansible.builtin.debug:
     msg:
-      - "Database exists: {{ eveng_healthcheck_results.database.exists }}"
-      - "Tables: {{ eveng_healthcheck_results.database.table_count | default(0) }}"
+      - "Database exists: {{ health_check_results.database.exists }}"
+      - "Tables: {{ health_check_results.database.table_count | default(0) }}"
       - >-
-        Admin user:
-        {{ 'OK' if eveng_healthcheck_results.database.admin_user_exists | default(false) else 'MISSING' }}
-  when: eveng_healthcheck_effective_report_format == 'detailed'
+        Admin user: {{ 'OK' if (health_check_results.database.admin_user_exists | default(false)) else 'MISSING' }}
+  when: health_check_report_format == 'detailed'
   tags:
     - health_database

@@ -2,8 +2,6 @@
 
 **Purpose:** Deploy and maintain EVE-NG lab files under `/opt/unetlab/labs` from controller, Git, or remote sources.  
 **Design reference:** ADR-XXXX (EVE-NG lab content management)  
-**Maintainer:** HybridOps.Tech
-
 ---
 
 ## 1. Overview

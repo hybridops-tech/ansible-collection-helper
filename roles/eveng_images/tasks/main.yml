@@ -2,10 +2,10 @@
 # Main orchestrator for EVE-NG image deployment
 
 - name: Ensure EVE-NG directories exist
-  ansible.builtin.file:
+  file:
     path: "/opt/unetlab/addons/{{ item }}"
     state: directory
-    mode: "0755"
+    mode: '0755'
     owner: root
     group: root
   loop:
@@ -16,9 +16,9 @@
     - dynamips
 
 - name: Download images
-  ansible.builtin.include_tasks: "download-{{ eveng_images_source }}.yml"
+  include_tasks: "download-{{ eveng_images_source }}.yml"
   when: eveng_images_download | default(true)
 
 - name: Install images
-  ansible.builtin.include_tasks: install.yml
+  include_tasks: install.yml
   when: eveng_images_install | default(true)

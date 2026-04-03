@@ -26,6 +26,10 @@ tags:
   - audit
   - eveng
   - tools
+  - proxmox
+  - hybrid
+  - ipam
+  - lab
 
 homepage: https://hybridops.tech
 documentation: https://docs.hybridops.tech

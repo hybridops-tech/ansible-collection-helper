@@ -9,6 +9,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
+## [0.1.5] - 2026-06-14
+
+### Changed
+
+- Cleaned public Galaxy metadata so collection references point to the published Galaxy and documentation surfaces.
+- Tightened the package surface to exclude old build archives and showcase-only assets.
+
+## [0.1.4] - 2026-04-03
+
+### Changed
+
+- Expanded Galaxy metadata tags for search discoverability.
+
 ## [0.1.3] - 2026-03-14
 
 ### Changed
@@ -45,9 +58,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `helper_netbox_inventory`
 - Reusable operational layout for helper-generated data.
 - `galaxy.yml` metadata for namespace `hybridops` and collection name `helper`.
-
-[Unreleased]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.3...HEAD
-[0.1.3]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.2...v0.1.3
-[0.1.2]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.1...v0.1.2
-[0.1.1]: https://github.com/hybridops-tech/ansible-collection-helper/compare/v0.1.0...v0.1.1
-[0.1.0]: https://github.com/hybridops-tech/ansible-collection-helper/releases/tag/v0.1.0

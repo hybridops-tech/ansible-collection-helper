@@ -5,7 +5,7 @@
 
 namespace: hybridops
 name: helper
-version: "0.1.4"
+version: "0.1.5"
 
 readme: README.md
 description: >-
@@ -33,23 +33,37 @@ tags:
 
 homepage: https://hybridops.tech
 documentation: https://docs.hybridops.tech
-repository: https://github.com/hybridops-tech/ansible-collection-helper
-issues: https://github.com/hybridops-tech/ansible-collection-helper/issues
+repository: https://galaxy.ansible.com/hybridops/helper
+issues: https://hybridops.tech/contact
 
 dependencies:
   hybridops.common: ">=0.1.0"
 
 build_ignore:
   - .git
+  - .gitignore
   - .github
   - .ansible
+  - .config/linters/.ansible
+  - .config/linters/.ansible/**
   - .tox
   - .venv
+  - "*.tar.gz"
   - build
   - dist
   - output
+  - roles/*/.github
+  - roles/*/.github/**
+  - roles/*/.showcase
+  - roles/*/.showcase/**
+  - roles/*/tests/output
+  - roles/*/tests/output/**
+  - roles/*/tests/outputs
+  - roles/*/tests/outputs/**
   - tests/output
+  - tests/output/**
   - tests/outputs
+  - tests/outputs/**
   - roles/eveng_images/tests/output
   - roles/eveng_healthcheck/tests/outputs
   - __pycache__

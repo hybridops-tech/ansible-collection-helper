@@ -125,8 +125,10 @@
         | sort
     )
 
-    if [ "${#DOWNLOADED_FILES[@]}" -ne 1 ]; then
-      log "Expected one archive from MEGA, found ${#DOWNLOADED_FILES[@]}."
+    DOWNLOADED_COUNT="$(printf '%s\n' "${DOWNLOADED_FILES[@]}" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+    if [ "$DOWNLOADED_COUNT" -ne 1 ]; then
+      log "Expected one archive from MEGA, found $DOWNLOADED_COUNT."
       find "$DOWNLOAD_DIR" -maxdepth 3 -type f -printf '%P\n' || true
       exit 1
     fi

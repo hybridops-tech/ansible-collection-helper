@@ -15,12 +15,12 @@
   ansible.builtin.stat:
     path: "{{ eveng_images_remote_path }}"
   delegate_to: "{{ eveng_images_remote_host }}"
-  register: remote_path_stat
+  register: eveng_images_remote_path_stat
 
 - name: Fail if remote path not found
   ansible.builtin.fail:
     msg: "Remote path not found: {{ eveng_images_remote_path }}"
-  when: not (remote_path_stat.stat.exists | bool)
+  when: not (eveng_images_remote_path_stat.stat.exists | bool)
 
 - name: Create cache directory
   ansible.builtin.file:
@@ -29,7 +29,7 @@
     mode: "0755"
 
 - name: Sync from remote directory
-  ansible.builtin.synchronize:
+  ansible.posix.synchronize:
     src: "{{ eveng_images_remote_path }}/"
     dest: "{{ eveng_images_cache_dir }}/"
     rsync_opts:
@@ -42,14 +42,14 @@
       - "--include=*.bin"
       - "--exclude=*"
   delegate_to: "{{ eveng_images_remote_host }}"
-  when: remote_path_stat.stat.isdir | bool
+  when: eveng_images_remote_path_stat.stat.isdir | bool
 
 - name: Copy remote file
-  ansible.builtin.synchronize:
+  ansible.posix.synchronize:
     src: "{{ eveng_images_remote_path }}"
     dest: "{{ eveng_images_cache_dir }}/{{ eveng_images_remote_path | basename }}"
   delegate_to: "{{ eveng_images_remote_host }}"
-  when: remote_path_stat.stat.isreg | bool
+  when: eveng_images_remote_path_stat.stat.isreg | bool
 
 - name: Find synced images
   ansible.builtin.find:
@@ -63,16 +63,16 @@
       - "*.img"
       - "*.bin"
     recurse: true
-  register: downloaded_files
+  register: eveng_images_discovered_files
 
 - name: Fail if no images found
   ansible.builtin.fail:
     msg: "No image files found in {{ eveng_images_cache_dir }}"
-  when: (downloaded_files.files | default([]) | length) == 0
+  when: (eveng_images_discovered_files.files | default([]) | length) == 0
 
 - name: Record download metadata
   ansible.builtin.set_fact:
-    eveng_downloaded_files: "{{ downloaded_files.files }}"
+    eveng_images_downloaded_files: "{{ eveng_images_discovered_files.files }}"
     eveng_images_run_at: "{{ ansible_date_time.iso8601 }}"
 
 - name: Build image report and export logs

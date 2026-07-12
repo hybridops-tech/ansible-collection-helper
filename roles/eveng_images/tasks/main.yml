@@ -2,7 +2,7 @@
 # Main orchestrator for EVE-NG image deployment
 
 - name: Ensure EVE-NG directories exist
-  file:
+  ansible.builtin.file:
     path: "{{ eveng_images_addons_dir }}/{{ item }}"
     state: directory
     mode: '0755'
@@ -16,9 +16,9 @@
     - dynamips
 
 - name: Download images
-  include_tasks: "download-{{ eveng_images_source }}.yml"
+  ansible.builtin.include_tasks: "download-{{ eveng_images_source }}.yml"
   when: eveng_images_download | default(true)
 
 - name: Install images
-  include_tasks: install.yml
+  ansible.builtin.include_tasks: install.yml
   when: eveng_images_install | default(true)

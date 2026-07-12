@@ -14,20 +14,20 @@
       - "*.img"
       - "*.bin"
     recurse: false
-  register: install_files
-  when: eveng_downloaded_files is not defined
+  register: eveng_images_install_files
+  when: eveng_images_downloaded_files is not defined
 
 - name: Use previously discovered download metadata when available
   ansible.builtin.set_fact:
-    install_files:
-      files: "{{ eveng_downloaded_files }}"
-  when: eveng_downloaded_files is defined
+    eveng_images_install_files:
+      files: "{{ eveng_images_downloaded_files }}"
+  when: eveng_images_downloaded_files is defined
   changed_when: false
 
 - name: Fail when there is nothing to install
   ansible.builtin.fail:
     msg: "No archives or images found to install in {{ eveng_images_cache_dir }}"
-  when: (install_files.files | default([]) | length) == 0
+  when: (eveng_images_install_files.files | default([]) | length) == 0
 
 - name: Detect type for each file
   ansible.builtin.shell: |
@@ -79,10 +79,10 @@
     echo "qemu"
   args:
     executable: /bin/bash
-  loop: "{{ install_files.files | default([]) }}"
+  loop: "{{ eveng_images_install_files.files | default([]) }}"
   loop_control:
     label: "{{ item.path | basename }}"
-  register: detected_types
+  register: eveng_images_detected_types
   changed_when: false
 
 - name: Fail when an image archive is invalid
@@ -90,13 +90,13 @@
     that:
       - (item.stdout | trim) != 'invalid'
     fail_msg: "Invalid image archive: {{ item.item.path }}"
-  loop: "{{ detected_types.results | default([]) }}"
+  loop: "{{ eveng_images_detected_types.results | default([]) }}"
   loop_control:
     label: "{{ item.item.path | basename }}"
 
 - name: Install each detected image
   ansible.builtin.include_tasks: install-one.yml
-  loop: "{{ detected_types.results | default([]) }}"
+  loop: "{{ eveng_images_detected_types.results | default([]) }}"
   loop_control:
     loop_var: image_detection
     label: "{{ image_detection.item.path | basename }}"
@@ -109,21 +109,23 @@
   ansible.builtin.stat:
     path: "{{ item }}"
   loop: "{{ eveng_images_installed_paths | default([]) }}"
-  register: installed_image_paths
+  register: eveng_images_installed_path_stats
 
 - name: Fail when installed image content is missing
   ansible.builtin.assert:
     that:
       - item.stat.exists
     fail_msg: "Installed image content is missing: {{ item.item }}"
-  loop: "{{ installed_image_paths.results | default([]) }}"
+  loop: "{{ eveng_images_installed_path_stats.results | default([]) }}"
   loop_control:
     label: "{{ item.item }}"
 
 - name: Fail when no image content was installed
   ansible.builtin.assert:
     that:
-      - (eveng_images_installed_paths | default([]) | length) == (detected_types.results | default([]) | length)
+      - >-
+        (eveng_images_installed_paths | default([]) | length)
+        == (eveng_images_detected_types.results | default([]) | length)
     fail_msg: >-
       Installed {{ eveng_images_installed_paths | default([]) | length }} of
-      {{ detected_types.results | default([]) | length }} requested image archives.
+      {{ eveng_images_detected_types.results | default([]) | length }} requested image archives.

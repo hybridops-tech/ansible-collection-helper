@@ -113,10 +113,10 @@
     HYOPS_ADDONS_DIR: "{{ eveng_images_addons_dir }}"
     HYOPS_RAW_QEMU_LAYOUT: "{{ eveng_images_raw_qemu_layout }}"
     HYOPS_RAW_QEMU_DISK_NAME: "{{ eveng_images_raw_qemu_disk_name }}"
-  register: installed_image
+  register: eveng_images_installed_image
   changed_when: true
 
 - name: Record installed image path
   ansible.builtin.set_fact:
     eveng_images_installed_paths: >-
-      {{ (eveng_images_installed_paths | default([])) + [installed_image.stdout_lines | last] }}
+      {{ (eveng_images_installed_paths | default([])) + [eveng_images_installed_image.stdout_lines | last] }}

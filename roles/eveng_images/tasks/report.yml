@@ -84,8 +84,8 @@
           }
         ]
       }}
-  loop: "{{ eveng_downloaded_files | default([]) }}"
-  when: eveng_downloaded_files is defined
+  loop: "{{ eveng_images_downloaded_files | default([]) }}"
+  when: eveng_images_downloaded_files is defined
 
 - name: Normalise report files list
   ansible.builtin.set_fact:

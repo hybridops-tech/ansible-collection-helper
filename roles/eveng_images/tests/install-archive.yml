@@ -58,12 +58,12 @@
     - name: Check installed disk
       ansible.builtin.stat:
         path: "{{ eveng_images_addons_dir }}/qemu/linux-test/virtioa.qcow2"
-      register: installed_disk
+      register: eveng_images_test_installed_disk
 
     - name: Require installed disk
       ansible.builtin.assert:
         that:
-          - installed_disk.stat.exists
+          - eveng_images_test_installed_disk.stat.exists
 
     - name: Remove test directory
       ansible.builtin.file:

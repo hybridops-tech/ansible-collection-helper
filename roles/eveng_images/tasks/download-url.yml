@@ -100,14 +100,14 @@
       exit 0
     fi
 
-    MARKER=".mega_download_start_$$"
-    touch "$MARKER"
+    DOWNLOAD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hyops-mega.XXXXXX")"
+    trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
 
     log "Starting MEGA download for $FILENAME"
     log "URL: {{ item.url }}"
     log "Timeout: 900 seconds"
 
-    timeout 900 mega-get "{{ item.url }}" . 2>&1 || {
+    timeout 900 mega-get "{{ item.url }}" "$DOWNLOAD_DIR" 2>&1 || {
       RC=$?
       if [ $RC -eq 124 ]; then
         log "Download timed out after 900 seconds."
@@ -119,30 +119,23 @@
 
     sleep 2
 
-    DOWNLOADED="$(
-      find . -type f \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' -o -name '*.gz' \) \
-        -newer "$MARKER" \
-        | sort -r \
-        | head -1 || true
-    )"
+    mapfile -t DOWNLOADED_FILES < <(
+      find "$DOWNLOAD_DIR" -type f \
+        \( -name '*.tar.gz' -o -name '*.tgz' -o -name '*.zip' -o -name '*.gz' \) \
+        | sort
+    )
 
-    if [ -z "$DOWNLOADED" ]; then
-      DOWNLOADED="$(ls -1t *.tar.gz *.tgz *.zip *.gz 2>/dev/null | head -1 || true)"
-    fi
-
-    if [ -z "$DOWNLOADED" ]; then
-      log "No archive file detected after MEGA download."
-      ls -lah
+    if [ "${#DOWNLOADED_FILES[@]}" -ne 1 ]; then
+      log "Expected one archive from MEGA, found ${#DOWNLOADED_FILES[@]}."
+      find "$DOWNLOAD_DIR" -maxdepth 3 -type f -printf '%P\n' || true
       exit 1
     fi
 
-    DOWNLOADED="${DOWNLOADED#./}"
+    DOWNLOADED="${DOWNLOADED_FILES[0]}"
     log "Detected downloaded file: $DOWNLOADED"
 
-    if [ "$DOWNLOADED" != "$FILENAME" ]; then
-      log "Renaming $DOWNLOADED to $FILENAME"
-      mv "$DOWNLOADED" "$FILENAME"
-    fi
+    log "Installing downloaded archive as $FILENAME"
+    mv "$DOWNLOADED" "$FILENAME"
 
     if [ ! -f "$FILENAME" ]; then
       log "File $FILENAME not found after rename."
@@ -205,6 +198,31 @@
   register: http_download_result
   changed_when: "'already exists. Skipping.' not in (http_download_result.stdout | default(''))"
   when: "'mega.nz' not in (item.url | default(''))"
+
+- name: Check every requested image archive is present
+  ansible.builtin.stat:
+    path: >-
+      {{ eveng_images_cache_dir }}/{{
+        item.name | default(
+          ('mega-download-' if 'mega.nz' in (item.url | default('')) else 'http-download-')
+          ~ (item.url | hash('md5'))[:8] ~ '.tar.gz'
+        )
+      }}
+  loop: "{{ eveng_images_list }}"
+  loop_control:
+    label: "{{ item.name | default(item.url) }}"
+  register: requested_image_archives
+
+- name: Fail when a requested image archive is missing
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+      - item.stat.isreg
+    fail_msg: >-
+      Requested image archive was not downloaded: {{ item.item.name | default(item.item.url) }}
+  loop: "{{ requested_image_archives.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.name | default(item.item.url) }}"
 
 - name: Discover downloaded files
   ansible.builtin.find:

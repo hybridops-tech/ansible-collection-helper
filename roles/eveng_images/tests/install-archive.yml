@@ -1,0 +1,71 @@
+---
+# purpose: Verify a QEMU archive is placed in the EVE-NG addons layout
+# maintainer: HybridOps.Tech
+
+- name: Test EVE-NG image archive installation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    test_root: /tmp/hybridops-eveng-images-install-test
+    eveng_images_cache_dir: "{{ test_root }}/cache"
+    eveng_images_addons_dir: "{{ test_root }}/addons"
+    eveng_images_fixpermissions_command: /bin/true
+    eveng_images_raw_qemu_layout: foldered
+    eveng_images_raw_qemu_disk_name: virtioa.qcow2
+    eveng_images_list:
+      - name: linux-test.tar.gz
+        type: qemu
+        url: https://example.invalid/linux-test.tar.gz
+
+  tasks:
+    - name: Reset test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Create fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ eveng_images_cache_dir }}"
+        - "{{ test_root }}/fixture/linux-test"
+
+    - name: Create fixture disk
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture/linux-test/virtioa.qcow2"
+        content: fixture
+        mode: "0644"
+
+    - name: Build fixture archive
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - "{{ eveng_images_cache_dir }}/linux-test.tar.gz"
+          - -C
+          - "{{ test_root }}/fixture"
+          - linux-test
+      changed_when: true
+
+    - name: Run archive installer
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_images
+        tasks_from: install
+
+    - name: Check installed disk
+      ansible.builtin.stat:
+        path: "{{ eveng_images_addons_dir }}/qemu/linux-test/virtioa.qcow2"
+      register: eveng_images_test_installed_disk
+
+    - name: Require installed disk
+      ansible.builtin.assert:
+        that:
+          - eveng_images_test_installed_disk.stat.exists
+
+    - name: Remove test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

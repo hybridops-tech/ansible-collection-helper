@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
+## [0.1.6] - 2026-07-12
+
+### Fixed
+
+- Preserved every requested MEGA archive instead of allowing an existing cache
+  file to be renamed for a later list entry.
+- Failed image runs when any requested archive is missing.
+- Installed detected QEMU, IOL, and Dynamips content into the EVE-NG addons
+  tree and verified each installed path.
+- Repaired EVE-NG image permissions after installation.
+
+### Added
+
+- Added an archive-installation fixture covering the QEMU folder layout.
+
 ## [0.1.5] - 2026-06-14
 
 ### Changed

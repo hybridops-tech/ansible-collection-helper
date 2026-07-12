@@ -12,6 +12,8 @@ eveng_images_install: true
 # Cache on target/EVE host
 eveng_images_cache_dir: /tmp/eveng_images_cache
 eveng_images_keep_cache: false
+eveng_images_addons_dir: /opt/unetlab/addons
+eveng_images_fixpermissions_command: /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
 
 # Raw image layout for QEMU
 eveng_images_raw_qemu_layout: foldered # foldered | generic

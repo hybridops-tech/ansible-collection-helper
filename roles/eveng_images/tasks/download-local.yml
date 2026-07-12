@@ -14,13 +14,13 @@
   ansible.builtin.stat:
     path: "{{ eveng_images_local_path }}"
   delegate_to: localhost
-  register: local_path
+  register: eveng_images_local_path_stat
   changed_when: false
 
 - name: Fail if path not found
   ansible.builtin.fail:
     msg: "Local path not found: {{ eveng_images_local_path }}"
-  when: not (local_path.stat.exists | default(false) | bool)
+  when: not (eveng_images_local_path_stat.stat.exists | default(false) | bool)
 
 - name: Create cache directory
   ansible.builtin.file:
@@ -33,7 +33,7 @@
     src: "{{ eveng_images_local_path }}"
     dest: "{{ eveng_images_cache_dir }}/{{ eveng_images_local_path | basename }}"
     mode: "0644"
-  when: local_path.stat.isreg | default(false) | bool
+  when: eveng_images_local_path_stat.stat.isreg | default(false) | bool
 
 - name: Sync directory to cache
   ansible.posix.synchronize:
@@ -48,7 +48,7 @@
       - "--include=*.img"
       - "--include=*.bin"
       - "--exclude=*"
-  when: local_path.stat.isdir | default(false) | bool
+  when: eveng_images_local_path_stat.stat.isdir | default(false) | bool
 
 - name: Find copied images
   ansible.builtin.find:
@@ -62,17 +62,17 @@
       - "*.img"
       - "*.bin"
     recurse: true
-  register: downloaded_files
+  register: eveng_images_discovered_files
   changed_when: false
 
 - name: Fail if no images found
   ansible.builtin.fail:
     msg: "No image files found in {{ eveng_images_local_path }}"
-  when: (downloaded_files.files | default([]) | length) == 0
+  when: (eveng_images_discovered_files.files | default([]) | length) == 0
 
 - name: Record download metadata
   ansible.builtin.set_fact:
-    eveng_downloaded_files: "{{ downloaded_files.files | default([]) }}"
+    eveng_images_downloaded_files: "{{ eveng_images_discovered_files.files | default([]) }}"
     eveng_images_run_at: "{{ ansible_date_time.iso8601 }}"
   changed_when: false
 

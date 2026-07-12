@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- Fail URL-based image runs when any requested archive is missing.
+- Isolate MEGA downloads so an existing cache file cannot be renamed for a later request.
+- Install detected archives into the EVE-NG addons tree and verify the resulting paths.
+
 ## [1.0.0] - 2026-01-13
 
 ### Added

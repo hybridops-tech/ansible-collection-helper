@@ -1,0 +1,122 @@
+---
+# purpose: Install one detected EVE-NG image into the addons tree
+# maintainer: HybridOps.Tech
+
+- name: Install detected image content
+  ansible.builtin.shell: |
+    set -euo pipefail
+
+    archive="$HYOPS_IMAGE_ARCHIVE"
+    detected="$HYOPS_IMAGE_TYPE"
+    basename="$(basename "$archive")"
+    image_type="${detected#structured:}"
+    image_type="${image_type#raw:}"
+    destination="$HYOPS_ADDONS_DIR/$image_type"
+    work_dir="$(mktemp -d "${TMPDIR:-/tmp}/hyops-image.XXXXXX")"
+    trap 'rm -rf "$work_dir"' EXIT
+
+    case "$image_type" in
+      qemu|iol|dynamips) ;;
+      *)
+        printf 'Unsupported image type: %s\n' "$detected" >&2
+        exit 1
+        ;;
+    esac
+
+    mkdir -p "$destination"
+
+    case "$detected" in
+      raw:qemu)
+        if [ "$HYOPS_RAW_QEMU_LAYOUT" = "foldered" ]; then
+          image_name="${basename%.qcow2}"
+          image_name="${image_name%.img}"
+          installed_path="$destination/$image_name"
+          mkdir -p "$installed_path"
+          cp -f "$archive" "$installed_path/$HYOPS_RAW_QEMU_DISK_NAME"
+        else
+          installed_path="$destination/$basename"
+          cp -f "$archive" "$installed_path"
+        fi
+        ;;
+      raw:iol)
+        installed_path="$destination/bin/$basename"
+        mkdir -p "$destination/bin"
+        cp -f "$archive" "$installed_path"
+        ;;
+      *)
+        wrapped_layout=false
+        case "$archive" in
+          *.tar.gz|*.tgz|*.gz)
+            if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+              printf 'Unsafe archive path detected: %s\n' "$archive" >&2
+              exit 1
+            fi
+            tar -xzf "$archive" -C "$work_dir"
+            ;;
+          *.zip)
+            if unzip -Z1 "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+              printf 'Unsafe archive path detected: %s\n' "$archive" >&2
+              exit 1
+            fi
+            unzip -q "$archive" -d "$work_dir"
+            ;;
+          *)
+            printf 'Unsupported image archive: %s\n' "$archive" >&2
+            exit 1
+            ;;
+        esac
+
+        if [ -d "$work_dir/opt/unetlab/addons/$image_type" ]; then
+          source_dir="$work_dir/opt/unetlab/addons/$image_type"
+        elif [ -d "$work_dir/$image_type" ]; then
+          source_dir="$work_dir/$image_type"
+        else
+          mapfile -t top_entries < <(find "$work_dir" -mindepth 1 -maxdepth 1 -print | sort)
+          if [ "$(printf '%s\n' "${top_entries[@]}" | sed '/^$/d' | wc -l | tr -d ' ')" -eq 1 ] \
+            && [ -d "${top_entries[0]}" ]; then
+            source_dir="$work_dir"
+          else
+            image_name="$basename"
+            image_name="${image_name%.tar.gz}"
+            image_name="${image_name%.tgz}"
+            image_name="${image_name%.zip}"
+            image_name="${image_name%.gz}"
+            source_dir="$work_dir"
+            mkdir -p "$destination/$image_name"
+            destination="$destination/$image_name"
+            wrapped_layout=true
+          fi
+        fi
+
+        first_source_entry="$(find "$source_dir" -mindepth 1 -maxdepth 1 -print | sort | head -1)"
+        if [ -z "$first_source_entry" ]; then
+          printf 'Archive produced no installable content: %s\n' "$archive" >&2
+          exit 1
+        fi
+
+        cp -a "$source_dir/." "$destination/"
+
+        if [ "$wrapped_layout" = true ]; then
+          installed_path="$destination"
+        else
+          installed_path="$destination/$(basename "$first_source_entry")"
+        fi
+        ;;
+    esac
+
+    printf '%s\n' "$installed_path"
+  args:
+    executable: /bin/bash
+  environment:
+    HYOPS_IMAGE_ARCHIVE: "{{ image_detection.item.path }}"
+    HYOPS_IMAGE_TYPE: "{{ image_detection.stdout | trim }}"
+    HYOPS_ADDONS_DIR: "{{ eveng_images_addons_dir }}"
+    HYOPS_RAW_QEMU_LAYOUT: "{{ eveng_images_raw_qemu_layout }}"
+    HYOPS_RAW_QEMU_DISK_NAME: "{{ eveng_images_raw_qemu_disk_name }}"
+  register: eveng_images_installed_image
+  changed_when: true
+
+- name: Record installed image path
+  ansible.builtin.set_fact:
+    eveng_images_installed_paths: >-
+      {{ (eveng_images_installed_paths | default([])) + [eveng_images_installed_image.stdout_lines | last] }}

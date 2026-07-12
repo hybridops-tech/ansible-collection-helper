@@ -3,7 +3,7 @@
 
 - name: Ensure EVE-NG directories exist
   file:
-    path: "/opt/unetlab/addons/{{ item }}"
+    path: "{{ eveng_images_addons_dir }}/{{ item }}"
     state: directory
     mode: '0755'
     owner: root

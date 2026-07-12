@@ -84,3 +84,46 @@
     label: "{{ item.path | basename }}"
   register: detected_types
   changed_when: false
+
+- name: Fail when an image archive is invalid
+  ansible.builtin.assert:
+    that:
+      - (item.stdout | trim) != 'invalid'
+    fail_msg: "Invalid image archive: {{ item.item.path }}"
+  loop: "{{ detected_types.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.path | basename }}"
+
+- name: Install each detected image
+  ansible.builtin.include_tasks: install-one.yml
+  loop: "{{ detected_types.results | default([]) }}"
+  loop_control:
+    loop_var: image_detection
+    label: "{{ image_detection.item.path | basename }}"
+
+- name: Repair EVE-NG image permissions
+  ansible.builtin.command: "{{ eveng_images_fixpermissions_command }}"
+  changed_when: true
+
+- name: Verify every image produced installed content
+  ansible.builtin.stat:
+    path: "{{ item }}"
+  loop: "{{ eveng_images_installed_paths | default([]) }}"
+  register: installed_image_paths
+
+- name: Fail when installed image content is missing
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists
+    fail_msg: "Installed image content is missing: {{ item.item }}"
+  loop: "{{ installed_image_paths.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+
+- name: Fail when no image content was installed
+  ansible.builtin.assert:
+    that:
+      - (eveng_images_installed_paths | default([]) | length) == (detected_types.results | default([]) | length)
+    fail_msg: >-
+      Installed {{ eveng_images_installed_paths | default([]) | length }} of
+      {{ detected_types.results | default([]) | length }} requested image archives.

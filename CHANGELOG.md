@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
+## [0.1.7] - 2026-07-14
+
+### Added
+
+- Added deterministic export and checksum-verified restore for EVE-NG lab
+  definitions.
+
+### Security
+
+- Rejected unsafe archive paths and archive links before restore.
+- Protected existing lab content unless replacement is enabled explicitly.
+
 ## [0.1.6] - 2026-07-12
 
 ### Fixed

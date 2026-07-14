@@ -7,7 +7,7 @@
 
 - name: Inspect controller archive
   ansible.builtin.stat:
-    path: "{{ eveng_lab_archive_path }}"
+    path: "{{ _eveng_lab_archive_path }}"
     checksum_algorithm: sha256
   delegate_to: localhost
   become: false
@@ -25,7 +25,7 @@
     argv:
       - tar
       - -tzf
-      - "{{ eveng_lab_archive_path }}"
+      - "{{ _eveng_lab_archive_path }}"
   delegate_to: localhost
   become: false
   changed_when: false
@@ -36,7 +36,7 @@
     argv:
       - tar
       - -tvzf
-      - "{{ eveng_lab_archive_path }}"
+      - "{{ _eveng_lab_archive_path }}"
   delegate_to: localhost
   become: false
   changed_when: false
@@ -104,7 +104,7 @@
 
 - name: Restore EVE-NG lab archive
   ansible.builtin.unarchive:
-    src: "{{ eveng_lab_archive_path }}"
+    src: "{{ _eveng_lab_archive_path }}"
     dest: "{{ eveng_lab_archive_labs_root }}"
     owner: "{{ eveng_lab_archive_owner }}"
     group: "{{ eveng_lab_archive_group }}"
@@ -121,6 +121,6 @@
   ansible.builtin.set_fact:
     eveng_lab_archive_results:
       action: restore
-      archive_path: "{{ eveng_lab_archive_path }}"
+      archive_path: "{{ _eveng_lab_archive_path }}"
       sha256: "{{ eveng_lab_archive_controller_stat.stat.checksum }}"
       folders: "{{ eveng_lab_archive_folders }}"

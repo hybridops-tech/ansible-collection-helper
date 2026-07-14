@@ -1,0 +1,12 @@
+---
+galaxy_info:
+  role_name: eveng_lab_archive
+  author: HybridOps.Tech
+  description: Export and restore portable EVE-NG lab definitions
+  license: Apache-2.0
+  min_ansible_version: "2.15"
+  platforms:
+    - name: Ubuntu
+      versions:
+        - jammy
+dependencies: []

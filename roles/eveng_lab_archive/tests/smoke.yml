@@ -9,11 +9,13 @@
   tasks:
     - name: Prepare test lab
       block:
-        - ansible.builtin.file:
+        - name: Create test lab directory
+          ansible.builtin.file:
             path: "{{ test_root }}/student"
             state: directory
             mode: "0775"
-        - ansible.builtin.copy:
+        - name: Write test lab definition
+          ansible.builtin.copy:
             dest: "{{ test_root }}/student/routing.unl"
             mode: "0664"
             content: "<lab name=\"routing\"/>\n"
@@ -32,7 +34,7 @@
 
     - name: Retain export checksum
       ansible.builtin.set_fact:
-        test_checksum: "{{ eveng_lab_archive_results.sha256 }}"
+        eveng_lab_archive_test_checksum: "{{ eveng_lab_archive_results.sha256 }}"
 
     - name: Repeat test lab export
       ansible.builtin.include_role:
@@ -49,7 +51,7 @@
     - name: Require stable archive checksum
       ansible.builtin.assert:
         that:
-          - eveng_lab_archive_results.sha256 == test_checksum
+          - eveng_lab_archive_results.sha256 == eveng_lab_archive_test_checksum
 
     - name: Remove test lab before restore
       ansible.builtin.file:
@@ -64,19 +66,19 @@
         eveng_lab_archive_labs_root: "{{ test_root }}"
         eveng_lab_archive_folders: [student]
         eveng_lab_archive_path: "{{ test_archive }}"
-        eveng_lab_archive_expected_sha256: "{{ test_checksum }}"
+        eveng_lab_archive_expected_sha256: "{{ eveng_lab_archive_test_checksum }}"
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
 
     - name: Verify restored test lab
       ansible.builtin.stat:
         path: "{{ test_root }}/student/routing.unl"
-      register: restored_lab
+      register: eveng_lab_archive_restored_lab
 
     - name: Require restored test lab
       ansible.builtin.assert:
         that:
-          - restored_lab.stat.isreg
+          - eveng_lab_archive_restored_lab.stat.isreg
 
   post_tasks:
     - name: Remove test data

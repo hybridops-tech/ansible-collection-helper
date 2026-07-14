@@ -1,0 +1,14 @@
+---
+# purpose: Default settings for portable EVE-NG lab archives
+# maintainer: HybridOps.Tech
+
+eveng_lab_archive_action: export
+eveng_lab_archive_labs_root: /opt/unetlab/labs
+eveng_lab_archive_folders: []
+eveng_lab_archive_path: ""
+eveng_lab_archive_resolved_path: ""
+eveng_lab_archive_expected_sha256: ""
+eveng_lab_archive_overwrite: false
+eveng_lab_archive_remote_dir: /tmp/hyops-eveng-lab-archive
+eveng_lab_archive_owner: www-data
+eveng_lab_archive_group: www-data

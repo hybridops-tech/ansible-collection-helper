@@ -1,0 +1,40 @@
+---
+# purpose: Export or restore portable EVE-NG lab definitions
+# maintainer: HybridOps.Tech
+
+- name: Resolve EVE-NG lab archive path
+  ansible.builtin.set_fact:
+    _eveng_lab_archive_path: >-
+      {{
+        eveng_lab_archive_resolved_path
+        if eveng_lab_archive_resolved_path | string | trim | length > 0
+        else eveng_lab_archive_path
+      }}
+
+- name: Validate EVE-NG lab archive settings
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_action in ['export', 'restore']
+      - _eveng_lab_archive_path | string | trim | length > 0
+      - _eveng_lab_archive_path is match('^/')
+      - eveng_lab_archive_folders is sequence
+      - eveng_lab_archive_folders is not string
+    fail_msg: "EVE-NG lab archive settings are invalid"
+
+- name: Validate selected EVE-NG lab folders
+  ansible.builtin.assert:
+    that:
+      - item is string
+      - item | string | trim | length > 0
+      - item is not match('^/')
+      - item is not search('(^|/)\.\.(/|$)')
+    fail_msg: "EVE-NG lab archive folders must be safe relative paths"
+  loop: "{{ eveng_lab_archive_folders }}"
+
+- name: Export EVE-NG labs
+  ansible.builtin.include_tasks: export.yml
+  when: eveng_lab_archive_action == 'export'
+
+- name: Restore EVE-NG labs
+  ansible.builtin.include_tasks: restore.yml
+  when: eveng_lab_archive_action == 'restore'

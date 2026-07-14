@@ -1,0 +1,90 @@
+---
+- name: Test EVE-NG lab archive export and restore
+  hosts: localhost
+  become: false
+  gather_facts: false
+  vars:
+    test_root: /tmp/hyops-eveng-lab-archive-test
+    test_archive: /tmp/hyops-eveng-lab-archive-test-output/labs.tar.gz
+  tasks:
+    - name: Prepare test lab
+      block:
+        - name: Create test lab directory
+          ansible.builtin.file:
+            path: "{{ test_root }}/student"
+            state: directory
+            mode: "0775"
+        - name: Write test lab definition
+          ansible.builtin.copy:
+            dest: "{{ test_root }}/student/routing.unl"
+            mode: "0664"
+            content: "<lab name=\"routing\"/>\n"
+
+    - name: Export test lab
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_lab_archive
+      vars:
+        eveng_lab_archive_action: export
+        eveng_lab_archive_labs_root: "{{ test_root }}"
+        eveng_lab_archive_folders: [student]
+        eveng_lab_archive_path: "{{ test_archive }}"
+        eveng_lab_archive_remote_dir: "{{ test_root }}-staging"
+        eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+
+    - name: Retain export checksum
+      ansible.builtin.set_fact:
+        eveng_lab_archive_test_checksum: "{{ eveng_lab_archive_results.sha256 }}"
+
+    - name: Repeat test lab export
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_lab_archive
+      vars:
+        eveng_lab_archive_action: export
+        eveng_lab_archive_labs_root: "{{ test_root }}"
+        eveng_lab_archive_folders: [student]
+        eveng_lab_archive_path: "{{ test_archive }}"
+        eveng_lab_archive_remote_dir: "{{ test_root }}-staging"
+        eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+
+    - name: Require stable archive checksum
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_results.sha256 == eveng_lab_archive_test_checksum
+
+    - name: Remove test lab before restore
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Restore test lab
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_lab_archive
+      vars:
+        eveng_lab_archive_action: restore
+        eveng_lab_archive_labs_root: "{{ test_root }}"
+        eveng_lab_archive_folders: [student]
+        eveng_lab_archive_path: "{{ test_archive }}"
+        eveng_lab_archive_expected_sha256: "{{ eveng_lab_archive_test_checksum }}"
+        eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+
+    - name: Verify restored test lab
+      ansible.builtin.stat:
+        path: "{{ test_root }}/student/routing.unl"
+      register: eveng_lab_archive_restored_lab
+
+    - name: Require restored test lab
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_restored_lab.stat.isreg
+
+  post_tasks:
+    - name: Remove test data
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ test_root }}"
+        - "{{ test_archive | dirname }}"

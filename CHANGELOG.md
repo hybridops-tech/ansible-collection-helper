@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
+## [0.1.8] - 2026-07-17
+
+### Fixed
+
+- Prevented failed or interrupted HTTP image downloads from leaving cache
+  files that a later run could reuse.
+- Rejected HTTP error responses and invalid QEMU disk content before EVE-NG
+  installation.
+
 ## [0.1.7] - 2026-07-15
 
 ### Added

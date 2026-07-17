@@ -10,6 +10,19 @@
         if eveng_lab_archive_resolved_path | string | trim | length > 0
         else eveng_lab_archive_path
       }}
+    _eveng_lab_archive_node_state_path: >-
+      {{
+        eveng_lab_archive_node_state_path
+        if eveng_lab_archive_node_state_path | string | trim | length > 0
+        else (
+          (
+            eveng_lab_archive_resolved_path
+            if eveng_lab_archive_resolved_path | string | trim | length > 0
+            else eveng_lab_archive_path
+          )
+          ~ '.node-state.tar.gz'
+        )
+      }}
 
 - name: Validate EVE-NG lab archive settings
   ansible.builtin.assert:
@@ -19,7 +32,33 @@
       - _eveng_lab_archive_path is match('^/')
       - eveng_lab_archive_folders is sequence
       - eveng_lab_archive_folders is not string
+      - eveng_lab_archive_include_node_state is boolean
+      - eveng_lab_archive_restore_node_state is boolean
+      - eveng_lab_archive_node_state_root is match('^/')
+      - _eveng_lab_archive_node_state_path is match('^/')
     fail_msg: "EVE-NG lab archive settings are invalid"
+
+- name: Require a complete lab export with node state
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_folders | length == 0
+    fail_msg: >-
+      Node-state capture requires a complete lab export. Leave
+      eveng_lab_archive_folders empty.
+  when:
+    - eveng_lab_archive_action == 'export'
+    - eveng_lab_archive_include_node_state | bool
+
+- name: Validate node-state restore checksum
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_node_state_expected_sha256 is match('^[0-9a-fA-F]{64}$')
+    fail_msg: >-
+      eveng_lab_archive_node_state_expected_sha256 must contain 64 hexadecimal
+      characters
+  when:
+    - eveng_lab_archive_action == 'restore'
+    - eveng_lab_archive_restore_node_state | bool
 
 - name: Validate selected EVE-NG lab folders
   ansible.builtin.assert:
@@ -35,6 +74,18 @@
   ansible.builtin.include_tasks: export.yml
   when: eveng_lab_archive_action == 'export'
 
+- name: Export stopped EVE-NG node state
+  ansible.builtin.include_tasks: export-node-state.yml
+  when:
+    - eveng_lab_archive_action == 'export'
+    - eveng_lab_archive_include_node_state | bool
+
 - name: Restore EVE-NG labs
   ansible.builtin.include_tasks: restore.yml
   when: eveng_lab_archive_action == 'restore'
+
+- name: Restore stopped EVE-NG node state
+  ansible.builtin.include_tasks: restore-node-state.yml
+  when:
+    - eveng_lab_archive_action == 'restore'
+    - eveng_lab_archive_restore_node_state | bool

@@ -1,0 +1,152 @@
+---
+- name: Check for running EVE-NG QEMU nodes
+  ansible.builtin.shell: |
+    set -o pipefail
+    pgrep -af '[/]opt/qemu[^ ]*/bin/qemu-system-' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: eveng_lab_archive_running_qemu
+
+- name: Require stopped QEMU nodes
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_running_qemu.stdout | trim | length == 0
+    fail_msg: >-
+      QEMU nodes are running. Stop the lab nodes before restoring node state.
+
+- name: Inspect controller node-state archive
+  ansible.builtin.stat:
+    path: "{{ _eveng_lab_archive_node_state_path }}"
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  register: eveng_lab_archive_node_state_controller_stat
+
+- name: Verify controller node-state archive
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_node_state_controller_stat.stat.isreg | default(false)
+      - >-
+        eveng_lab_archive_node_state_controller_stat.stat.checksum | lower
+        == eveng_lab_archive_node_state_expected_sha256 | lower
+    fail_msg: >-
+      EVE-NG node-state archive is missing or its SHA-256 checksum does not
+      match
+
+- name: List controller node-state archive members
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -tzf
+      - "{{ _eveng_lab_archive_node_state_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_node_state_members
+
+- name: Inspect controller node-state archive member types
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -tvzf
+      - "{{ _eveng_lab_archive_node_state_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_node_state_member_types
+
+- name: Reject unsafe node-state archive members
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_node_state_members.stdout_lines
+        | reject('match', '(^/|(^|/)\.\.(/|$))')
+        | list
+        | length == eveng_lab_archive_node_state_members.stdout_lines | length
+      - >-
+        eveng_lab_archive_node_state_members.stdout_lines
+        | reject('match', '^.+\.qcow2$')
+        | list
+        | length == 0
+      - >-
+        eveng_lab_archive_node_state_member_types.stdout_lines
+        | select('match', '^[lh]')
+        | list
+        | length == 0
+    fail_msg: "EVE-NG node-state archive contains an unsafe member"
+
+- name: Inspect existing node-state paths
+  ansible.builtin.stat:
+    path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
+  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  register: eveng_lab_archive_existing_node_state
+  when: not eveng_lab_archive_overwrite | bool
+
+- name: Protect existing node state
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      EVE-NG node state already exists: {{ item.item }}. Enable overwrite only
+      when replacing it is intended.
+  loop: "{{ eveng_lab_archive_existing_node_state.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not eveng_lab_archive_overwrite | bool
+
+- name: Ensure EVE-NG node-state root exists
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_node_state_root }}"
+    state: directory
+    owner: "{{ eveng_lab_archive_owner }}"
+    group: "{{ eveng_lab_archive_group }}"
+    mode: "0755"
+
+- name: Restore EVE-NG node state
+  ansible.builtin.unarchive:
+    src: "{{ _eveng_lab_archive_node_state_path }}"
+    dest: "{{ eveng_lab_archive_node_state_root }}"
+    owner: "{{ eveng_lab_archive_owner }}"
+    group: "{{ eveng_lab_archive_group }}"
+    remote_src: false
+
+- name: Select available qemu-img command
+  ansible.builtin.shell: |
+    set -eu
+    if [ -x {{ eveng_lab_archive_qemu_img | quote }} ]; then
+      printf '%s\n' {{ eveng_lab_archive_qemu_img | quote }}
+    else
+      command -v qemu-img
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: eveng_lab_archive_qemu_img_command
+
+- name: Validate restored EVE-NG QEMU overlays
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_lab_archive_qemu_img_command.stdout | trim }}"
+      - check
+      - -q
+      - "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
+  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+
+- name: Publish EVE-NG node-state restore result
+  ansible.builtin.set_fact:
+    eveng_lab_archive_results: >-
+      {{
+        eveng_lab_archive_results
+        | combine({
+          'node_state_restored': true,
+          'node_state_archive_path': _eveng_lab_archive_node_state_path,
+          'node_state_sha256':
+            eveng_lab_archive_node_state_controller_stat.stat.checksum,
+          'node_state_files':
+            eveng_lab_archive_node_state_members.stdout_lines | length
+        })
+      }}

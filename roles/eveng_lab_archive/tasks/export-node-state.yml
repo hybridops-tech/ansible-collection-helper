@@ -1,0 +1,179 @@
+---
+- name: Inspect EVE-NG node-state root
+  ansible.builtin.stat:
+    path: "{{ eveng_lab_archive_node_state_root }}"
+  register: eveng_lab_archive_node_state_root_stat
+
+- name: Prepare remote node-state archive directory
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_remote_dir }}"
+    state: directory
+    mode: "0700"
+
+- name: Require EVE-NG node-state root
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_node_state_root_stat.stat.isdir | default(false)
+    fail_msg: >-
+      EVE-NG node-state root does not exist:
+      {{ eveng_lab_archive_node_state_root }}
+
+- name: Select available qemu-img command
+  ansible.builtin.shell: |
+    set -eu
+    if [ -x {{ eveng_lab_archive_qemu_img | quote }} ]; then
+      printf '%s\n' {{ eveng_lab_archive_qemu_img | quote }}
+    else
+      command -v qemu-img
+    fi
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: eveng_lab_archive_qemu_img_command
+
+- name: Check for running EVE-NG QEMU nodes
+  ansible.builtin.shell: |
+    set -o pipefail
+    pgrep -af '[/]opt/qemu[^ ]*/bin/qemu-system-' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: eveng_lab_archive_running_qemu
+
+- name: Require stopped QEMU nodes
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_running_qemu.stdout | trim | length == 0
+    fail_msg: >-
+      QEMU nodes are running. Stop the lab nodes before capturing node state.
+
+- name: Find EVE-NG QEMU overlays
+  ansible.builtin.find:
+    paths: "{{ eveng_lab_archive_node_state_root }}"
+    patterns: "*.qcow2"
+    file_type: file
+    recurse: true
+    follow: false
+  register: eveng_lab_archive_node_state_files
+
+- name: Validate EVE-NG QEMU overlays
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_lab_archive_qemu_img_command.stdout | trim }}"
+      - check
+      - -q
+      - "{{ item.path }}"
+  loop: "{{ eveng_lab_archive_node_state_files.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+  changed_when: false
+
+- name: Write node-state member list
+  ansible.builtin.copy:
+    dest: "{{ eveng_lab_archive_remote_dir }}/node-state-members.txt"
+    mode: "0600"
+    content: |
+      {% for item in eveng_lab_archive_node_state_files.files | sort(attribute='path') %}
+      {{ item.path | regex_replace('^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '') }}
+      {% endfor %}
+  when: eveng_lab_archive_node_state_files.matched | int > 0
+
+- name: Build EVE-NG node-state archive
+  ansible.builtin.command:
+    argv:
+      - tar
+      - --sort=name
+      - --mtime=@0
+      - --owner=0
+      - --group=0
+      - --numeric-owner
+      - -czf
+      - "{{ eveng_lab_archive_remote_dir }}/node-state.tar.gz"
+      - -C
+      - "{{ eveng_lab_archive_node_state_root }}"
+      - -T
+      - "{{ eveng_lab_archive_remote_dir }}/node-state-members.txt"
+  changed_when: true
+  when: eveng_lab_archive_node_state_files.matched | int > 0
+
+- name: Fetch EVE-NG node-state archive
+  ansible.builtin.fetch:
+    src: "{{ eveng_lab_archive_remote_dir }}/node-state.tar.gz"
+    dest: "{{ _eveng_lab_archive_node_state_path }}"
+    flat: true
+  when: eveng_lab_archive_node_state_files.matched | int > 0
+
+- name: Remove stale controller node-state archive
+  ansible.builtin.file:
+    path: "{{ _eveng_lab_archive_node_state_path }}"
+    state: absent
+  delegate_to: localhost
+  become: false
+  when: eveng_lab_archive_node_state_files.matched | int == 0
+
+- name: Protect controller node-state archive
+  ansible.builtin.file:
+    path: "{{ _eveng_lab_archive_node_state_path }}"
+    state: file
+    mode: "0600"
+  delegate_to: localhost
+  become: false
+  when: eveng_lab_archive_node_state_files.matched | int > 0
+
+- name: Calculate node-state archive checksum
+  ansible.builtin.stat:
+    path: "{{ _eveng_lab_archive_node_state_path }}"
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  register: eveng_lab_archive_node_state_controller_stat
+  when: eveng_lab_archive_node_state_files.matched | int > 0
+
+- name: Publish EVE-NG node-state archive result
+  ansible.builtin.set_fact:
+    eveng_lab_archive_results: >-
+      {{
+        eveng_lab_archive_results
+        | combine({
+          'node_state_included': eveng_lab_archive_node_state_files.matched | int > 0,
+          'node_state_archive_path': (
+            _eveng_lab_archive_node_state_path
+            if eveng_lab_archive_node_state_files.matched | int > 0
+            else ''
+          ),
+          'node_state_sha256': (
+            eveng_lab_archive_node_state_controller_stat.stat.checksum
+            if eveng_lab_archive_node_state_files.matched | int > 0
+            else ''
+          ),
+          'node_state_files': eveng_lab_archive_node_state_files.matched | int
+        })
+      }}
+
+- name: Update controller archive manifest with node state
+  ansible.builtin.copy:
+    dest: "{{ _eveng_lab_archive_path }}.json"
+    mode: "0600"
+    content: >-
+      {{ {
+        'schema_version': 2,
+        'kind': 'hybridops/eveng-lab-archive',
+        'archive_file': _eveng_lab_archive_path | basename,
+        'sha256': eveng_lab_archive_results.sha256,
+        'created_at': eveng_lab_archive_results.created_at,
+        'folders': eveng_lab_archive_results.folders,
+        'node_state': {
+          'included': eveng_lab_archive_results.node_state_included,
+          'archive_file':
+            eveng_lab_archive_results.node_state_archive_path | basename,
+          'sha256': eveng_lab_archive_results.node_state_sha256,
+          'files': eveng_lab_archive_results.node_state_files
+        }
+      } | to_nice_json }}
+  delegate_to: localhost
+  become: false
+
+- name: Remove remote node-state archive staging
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_remote_dir }}"
+    state: absent

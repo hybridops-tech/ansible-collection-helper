@@ -44,6 +44,9 @@ Entry fields:
 - `name` – optional; used as the cache filename and for report mapping when present.
 
 MEGA URLs (`mega.nz`) are handled via MEGAcmd (`mega-get`), installed on demand when first used.
+HTTP downloads are written to a temporary file and moved into the cache only
+after a successful, non-empty response. HTTP errors and interrupted downloads
+do not leave a final cache file.
 
 ### 2.2 Local source (`eveng_images_source: local`)
 
@@ -124,11 +127,15 @@ Behaviour:
 - **Generic archives**:
   - Extracted into `/opt/unetlab/addons/<type>/`.
 - **Raw QEMU images**:
+  - Inspected with `qemu-img` before installation.
+  - Text, JSON and XML responses are rejected.
+  - Files named `*.qcow2` must report the `qcow2` format.
   - `generic`: copied into `/opt/unetlab/addons/qemu/<basename>`.
   - `foldered`:
     - Directory created at `/opt/unetlab/addons/qemu/<basename-without-ext>/`.
     - Disk copied to `<dir>/<eveng_images_raw_qemu_disk_name>` (default `virtioa.qcow2`).
 - **Raw IOL/Dynamips**:
+  - Text, JSON and XML responses are rejected before installation.
   - IOL: `/opt/unetlab/addons/iol/bin/<basename>`
   - Dynamips: `/opt/unetlab/addons/dynamips/<basename>`
 

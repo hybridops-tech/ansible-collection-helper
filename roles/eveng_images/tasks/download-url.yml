@@ -22,8 +22,10 @@
       - item.url is defined
       - item.type is defined
       - item.type in ['iol', 'qemu', 'dynamips']
+      - item.name is not defined or (item.name | basename) == item.name
     fail_msg: >-
-      Each image must have 'url' and 'type' (iol, qemu, or dynamips). 'name' is optional.
+      Each image must have 'url' and 'type' (iol, qemu, or dynamips).
+      Optional names must be safe filenames.
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"
@@ -93,7 +95,8 @@
 
     cd "{{ eveng_images_cache_dir }}"
 
-    FILENAME="{{ item.name | default('mega-download-' ~ (item.url | hash('md5'))[:8] ~ '.tar.gz') }}"
+    FILENAME="$HYOPS_IMAGE_NAME"
+    URL="$HYOPS_IMAGE_URL"
 
     if [ -f "$FILENAME" ]; then
       log "File $FILENAME already exists. Skipping."
@@ -104,10 +107,10 @@
     trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
 
     log "Starting MEGA download for $FILENAME"
-    log "URL: {{ item.url }}"
+    log "URL: $URL"
     log "Timeout: 900 seconds"
 
-    timeout 900 mega-get "{{ item.url }}" "$DOWNLOAD_DIR" 2>&1 || {
+    timeout 900 mega-get "$URL" "$DOWNLOAD_DIR" 2>&1 || {
       RC=$?
       if [ $RC -eq 124 ]; then
         log "Download timed out after 900 seconds."
@@ -148,6 +151,12 @@
     log "Completed MEGA download: $FILENAME ($SIZE)"
   args:
     executable: /bin/bash
+  environment:
+    HYOPS_IMAGE_NAME: >-
+      {{ item.name | default(
+        'mega-download-' ~ (item.url | hash('md5'))[:8] ~ '.tar.gz'
+      ) }}
+    HYOPS_IMAGE_URL: "{{ item.url }}"
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"
@@ -166,7 +175,8 @@
 
     cd "{{ eveng_images_cache_dir }}"
 
-    FILENAME="{{ item.name | default('http-download-' ~ (item.url | hash('md5'))[:8] ~ '.tar.gz') }}"
+    FILENAME="$HYOPS_IMAGE_NAME"
+    URL="$HYOPS_IMAGE_URL"
 
     if [ -f "$FILENAME" ]; then
       log "File $FILENAME already exists. Skipping."
@@ -174,13 +184,21 @@
     fi
 
     log "Starting HTTP download for $FILENAME"
-    log "URL: {{ item.url }}"
+    log "URL: $URL"
     log "Timeout: 900 seconds"
 
-    timeout 900 curl -L --progress-bar \
+    PART_FILE="$(mktemp "./.${FILENAME}.part.XXXXXX")"
+    trap 'rm -f -- "$PART_FILE"' EXIT
+
+    timeout 900 curl \
+      --fail \
+      --show-error \
+      --location \
+      --progress-bar \
+      --connect-timeout 30 \
       -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36" \
-      -o "$FILENAME" \
-      "{{ item.url }}" || {
+      -o "$PART_FILE" \
+      "$URL" || {
       RC=$?
       if [ $RC -eq 124 ]; then
         log "Download timed out after 900 seconds."
@@ -190,10 +208,24 @@
       exit $RC
     }
 
+    if [ ! -s "$PART_FILE" ]; then
+      log "Download produced an empty file."
+      exit 1
+    fi
+
+    mv -f -- "$PART_FILE" "$FILENAME"
+    trap - EXIT
+
     SIZE="$(du -h "$FILENAME" | cut -f1)"
     log "Completed HTTP download: $FILENAME ($SIZE)"
   args:
     executable: /bin/bash
+  environment:
+    HYOPS_IMAGE_NAME: >-
+      {{ item.name | default(
+        'http-download-' ~ (item.url | hash('md5'))[:8] ~ '.tar.gz'
+      ) }}
+    HYOPS_IMAGE_URL: "{{ item.url }}"
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"

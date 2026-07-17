@@ -1,0 +1,90 @@
+---
+# purpose: Verify failed EVE-NG downloads and invalid QEMU disks are not installed
+# maintainer: HybridOps.Tech
+
+- name: Test EVE-NG image download failures
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    test_root: /tmp/hybridops-eveng-images-download-test
+    eveng_images_cache_dir: "{{ test_root }}/cache"
+    eveng_images_generate_report: false
+    eveng_images_list:
+      - name: unavailable.qcow2
+        type: qemu
+        url: http://127.0.0.1:9/unavailable.qcow2
+
+  tasks:
+    - name: Reset download test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Initialise download test
+      ansible.builtin.set_fact:
+        eveng_images_download_failed: false
+
+    - name: Require the unavailable download to fail
+      block:
+        - name: Run URL download tasks
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_images
+            tasks_from: download-url
+
+        - name: Reject unexpected download success
+          ansible.builtin.fail:
+            msg: "The unavailable image download succeeded."
+      rescue:
+        - name: Record the expected download failure
+          ansible.builtin.set_fact:
+            eveng_images_download_failed: true
+
+    - name: Inspect cache after download failure
+      ansible.builtin.find:
+        paths: "{{ eveng_images_cache_dir }}"
+        hidden: true
+        recurse: false
+        file_type: file
+      register: eveng_images_failed_download_cache
+
+    - name: Require a clean cache after download failure
+      ansible.builtin.assert:
+        that:
+          - eveng_images_download_failed | bool
+          - eveng_images_failed_download_cache.matched == 0
+
+    - name: Create invalid QEMU fixture
+      ansible.builtin.copy:
+        dest: "{{ eveng_images_cache_dir }}/invalid.qcow2"
+        content: "<html>not a disk image</html>"
+        mode: "0644"
+
+    - name: Initialise QEMU validation test
+      ansible.builtin.set_fact:
+        eveng_images_qemu_validation_failed: false
+
+    - name: Require the invalid QEMU disk to fail
+      block:
+        - name: Run image installation tasks
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_images
+            tasks_from: install
+
+        - name: Reject unexpected QEMU validation success
+          ansible.builtin.fail:
+            msg: "The invalid QEMU disk was accepted."
+      rescue:
+        - name: Record the expected QEMU validation failure
+          ansible.builtin.set_fact:
+            eveng_images_qemu_validation_failed: true
+
+    - name: Require invalid QEMU rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_images_qemu_validation_failed | bool
+
+    - name: Remove download test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

@@ -35,13 +35,40 @@
     ARCHIVE="{{ item.path }}"
     BASENAME="$(basename "$ARCHIVE")"
     EXT="${BASENAME##*.}"
+    MIME_TYPE="$(file --brief --mime-type "$ARCHIVE" 2>/dev/null || true)"
 
     case "$EXT" in
       qcow2|img)
+        if ! command -v qemu-img >/dev/null 2>&1; then
+          echo "invalid:qemu-img-unavailable"
+          exit 0
+        fi
+        if ! qemu-img info --output=json "$ARCHIVE" >/dev/null 2>&1; then
+          echo "invalid:qemu-disk"
+          exit 0
+        fi
+        case "$MIME_TYPE" in
+          text/*|application/json|application/xml)
+            echo "invalid:qemu-content"
+            exit 0
+            ;;
+        esac
+        if [ "$EXT" = "qcow2" ] \
+          && ! qemu-img info --output=json "$ARCHIVE" \
+            | grep -Eq '"format"[[:space:]]*:[[:space:]]*"qcow2"'; then
+          echo "invalid:qemu-format"
+          exit 0
+        fi
         echo "raw:qemu"
         exit 0
         ;;
       bin)
+        case "$MIME_TYPE" in
+          text/*|application/json|application/xml)
+            echo "invalid:binary-content"
+            exit 0
+            ;;
+        esac
         echo "raw:iol"
         exit 0
         ;;
@@ -88,8 +115,10 @@
 - name: Fail when an image archive is invalid
   ansible.builtin.assert:
     that:
-      - (item.stdout | trim) != 'invalid'
-    fail_msg: "Invalid image archive: {{ item.item.path }}"
+      - not (item.stdout | trim).startswith('invalid')
+    fail_msg: >-
+      Invalid image file: {{ item.item.path }}
+      ({{ item.stdout | trim }}).
   loop: "{{ eveng_images_detected_types.results | default([]) }}"
   loop_control:
     label: "{{ item.item.path | basename }}"

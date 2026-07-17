@@ -5,8 +5,18 @@
   gather_facts: false
   vars:
     test_root: /tmp/hyops-eveng-lab-archive-test
+    test_node_state_root: /tmp/hyops-eveng-lab-node-state-test
     test_archive: /tmp/hyops-eveng-lab-archive-test-output/labs.tar.gz
   tasks:
+    - name: Clear previous test data
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ test_root }}"
+        - "{{ test_node_state_root }}"
+        - "{{ test_archive | dirname }}"
+
     - name: Prepare test lab
       block:
         - name: Create test lab directory
@@ -19,6 +29,21 @@
             dest: "{{ test_root }}/student/routing.unl"
             mode: "0664"
             content: "<lab name=\"routing\"/>\n"
+        - name: Create test node-state directory
+          ansible.builtin.file:
+            path: "{{ test_node_state_root }}/0/test-lab/1"
+            state: directory
+            mode: "0755"
+        - name: Create test QEMU overlay
+          ansible.builtin.command:
+            argv:
+              - qemu-img
+              - create
+              - -f
+              - qcow2
+              - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
+              - 1M
+          changed_when: true
 
     - name: Export test lab
       ansible.builtin.include_role:
@@ -26,15 +51,20 @@
       vars:
         eveng_lab_archive_action: export
         eveng_lab_archive_labs_root: "{{ test_root }}"
-        eveng_lab_archive_folders: [student]
+        eveng_lab_archive_folders: []
         eveng_lab_archive_path: "{{ test_archive }}"
         eveng_lab_archive_remote_dir: "{{ test_root }}-staging"
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
+        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
 
     - name: Retain export checksum
       ansible.builtin.set_fact:
         eveng_lab_archive_test_checksum: "{{ eveng_lab_archive_results.sha256 }}"
+        eveng_lab_archive_test_node_state_checksum: >-
+          {{ eveng_lab_archive_results.node_state_sha256 }}
 
     - name: Repeat test lab export
       ansible.builtin.include_role:
@@ -42,21 +72,30 @@
       vars:
         eveng_lab_archive_action: export
         eveng_lab_archive_labs_root: "{{ test_root }}"
-        eveng_lab_archive_folders: [student]
+        eveng_lab_archive_folders: []
         eveng_lab_archive_path: "{{ test_archive }}"
         eveng_lab_archive_remote_dir: "{{ test_root }}-staging"
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
+        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
 
     - name: Require stable archive checksum
       ansible.builtin.assert:
         that:
           - eveng_lab_archive_results.sha256 == eveng_lab_archive_test_checksum
+          - >-
+            eveng_lab_archive_results.node_state_sha256
+            == eveng_lab_archive_test_node_state_checksum
 
     - name: Remove test lab before restore
       ansible.builtin.file:
-        path: "{{ test_root }}"
+        path: "{{ item }}"
         state: absent
+      loop:
+        - "{{ test_root }}"
+        - "{{ test_node_state_root }}"
 
     - name: Restore test lab
       ansible.builtin.include_role:
@@ -69,6 +108,11 @@
         eveng_lab_archive_expected_sha256: "{{ eveng_lab_archive_test_checksum }}"
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_restore_node_state: true
+        eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
+        eveng_lab_archive_node_state_expected_sha256: >-
+          {{ eveng_lab_archive_test_node_state_checksum }}
+        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
 
     - name: Verify restored test lab
       ansible.builtin.stat:
@@ -80,6 +124,15 @@
         that:
           - eveng_lab_archive_restored_lab.stat.isreg
 
+    - name: Verify restored test node state
+      ansible.builtin.command:
+        argv:
+          - qemu-img
+          - check
+          - -q
+          - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
+      changed_when: false
+
   post_tasks:
     - name: Remove test data
       ansible.builtin.file:
@@ -87,4 +140,5 @@
         state: absent
       loop:
         - "{{ test_root }}"
+        - "{{ test_node_state_root }}"
         - "{{ test_archive | dirname }}"

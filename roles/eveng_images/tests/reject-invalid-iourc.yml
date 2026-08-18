@@ -1,0 +1,33 @@
+---
+- name: Test rejection of malformed EVE-NG IOL licence material
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    eveng_images_iol_license_required: true
+    eveng_images_iol_license_content: not-an-iourc
+
+  tasks:
+    - name: Initialise expected rejection
+      ansible.builtin.set_fact:
+        eveng_images_invalid_iourc_rejected: false
+
+    - name: Require malformed IOL licence rejection
+      block:
+        - name: Run EVE-NG image validation
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_images
+            tasks_from: validate
+
+        - name: Reject unexpected licence acceptance
+          ansible.builtin.fail:
+            msg: "Malformed IOL licence material was accepted."
+      rescue:
+        - name: Record expected licence rejection
+          ansible.builtin.set_fact:
+            eveng_images_invalid_iourc_rejected: true
+
+    - name: Require expected licence rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_images_invalid_iourc_rejected | bool

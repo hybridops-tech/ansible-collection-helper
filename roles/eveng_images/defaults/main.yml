@@ -15,6 +15,14 @@ eveng_images_keep_cache: false
 eveng_images_addons_dir: /opt/unetlab/addons
 eveng_images_fixpermissions_command: /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
 
+# Optional operator-supplied IOL licence material. The role never downloads or
+# generates this value. HybridOps.Core resolves it from the environment vault.
+eveng_images_iol_license_content: ""
+eveng_images_iol_license_required: false
+eveng_images_iol_license_path: "{{ eveng_images_addons_dir }}/iol/bin/iourc"
+eveng_images_iol_license_owner: root
+eveng_images_iol_license_group: root
+
 # Raw image layout for QEMU
 eveng_images_raw_qemu_layout: foldered # foldered | generic
 eveng_images_raw_qemu_disk_name: virtioa.qcow2

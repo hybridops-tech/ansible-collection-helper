@@ -1,0 +1,30 @@
+---
+- name: Require operator-supplied IOL licence material when requested
+  ansible.builtin.assert:
+    that:
+      - eveng_images_iol_license_content | string | length > 0
+    fail_msg: >-
+      IOL licence material is required for this deployment. Store an authorised
+      iourc file in the HybridOps environment vault before rerunning.
+  when: eveng_images_iol_license_required | bool
+
+- name: Validate the fixed EVE-NG IOL licence destination
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_images_iol_license_path
+        == eveng_images_addons_dir ~ '/iol/bin/iourc'
+      - eveng_images_iol_license_owner == 'root'
+      - eveng_images_iol_license_group == 'root'
+    fail_msg: >-
+      The EVE-NG IOL licence must use the fixed IOL destination and root
+      ownership.
+
+- name: Validate operator-supplied IOL licence material
+  ansible.builtin.assert:
+    that:
+      - eveng_images_iol_license_content is string
+      - eveng_images_iol_license_content | trim is match('(?s)^\[license\]\s+.+')
+    fail_msg: "The supplied IOL licence file is not a valid iourc document."
+  when: eveng_images_iol_license_content | string | length > 0
+  no_log: true

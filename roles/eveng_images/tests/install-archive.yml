@@ -13,6 +13,13 @@
     eveng_images_fixpermissions_command: /bin/true
     eveng_images_raw_qemu_layout: foldered
     eveng_images_raw_qemu_disk_name: virtioa.qcow2
+    eveng_images_iol_license_content: |
+      [license]
+      test-host = 0000000000000000;
+    # The role contract fixes these to root. The direct task fixture runs
+    # unprivileged and overrides ownership only to exercise placement safely.
+    eveng_images_iol_license_owner: "{{ lookup('env', 'USER') }}"
+    eveng_images_iol_license_group: "{{ lookup('env', 'USER') }}"
     eveng_images_list:
       - name: linux-test.tar.gz
         type: qemu
@@ -32,6 +39,7 @@
       loop:
         - "{{ eveng_images_cache_dir }}"
         - "{{ test_root }}/fixture/linux-test"
+        - "{{ eveng_images_addons_dir }}/iol/bin"
 
     - name: Create fixture disk
       ansible.builtin.copy:
@@ -60,10 +68,18 @@
         path: "{{ eveng_images_addons_dir }}/qemu/linux-test/virtioa.qcow2"
       register: eveng_images_test_installed_disk
 
+    - name: Check installed IOL licence
+      ansible.builtin.stat:
+        path: "{{ eveng_images_addons_dir }}/iol/bin/iourc"
+      register: eveng_images_test_iol_license
+
     - name: Require installed disk
       ansible.builtin.assert:
         that:
           - eveng_images_test_installed_disk.stat.exists
+          - eveng_images_test_iol_license.stat.isreg
+          - eveng_images_test_iol_license.stat.size > 0
+          - eveng_images_iol_license_ready | bool
 
     - name: Remove test directory
       ansible.builtin.file:

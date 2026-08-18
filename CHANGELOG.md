@@ -12,6 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added protected placement and validation of operator-supplied EVE-NG IOL
   licence material without including it in reports or lab archives.
 
+### Fixed
+
+- Mapped root-layout IOL archives into the EVE-NG `iol/bin` directory and
+  rejected archives that embed licence material.
+
 ## [0.1.8] - 2026-07-17
 
 ### Fixed

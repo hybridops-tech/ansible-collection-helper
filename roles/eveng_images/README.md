@@ -139,6 +139,11 @@ Behaviour:
   - Text, JSON and XML responses are rejected before installation.
   - IOL: `/opt/unetlab/addons/iol/bin/<basename>`
   - Dynamips: `/opt/unetlab/addons/dynamips/<basename>`
+- **IOL archives**:
+  - Structured `iol/` or `/opt/unetlab/addons/iol/` layouts are preserved.
+  - Root or nested `*.bin` payloads are placed in `/opt/unetlab/addons/iol/bin/`.
+  - Embedded `iourc` files are rejected; licence material must use the encrypted
+    secret input described below.
 
 After installation, `/opt/unetlab/addons/` is normalised to `root:root` ownership with `0755` permissions.
 

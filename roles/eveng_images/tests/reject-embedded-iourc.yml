@@ -1,0 +1,84 @@
+---
+# purpose: Reject IOL archives that embed licence material
+# maintainer: HybridOps.Tech
+
+- name: Test embedded IOL licence rejection
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    test_root: /tmp/hybridops-eveng-images-iourc-archive-test
+    eveng_images_cache_dir: "{{ test_root }}/cache"
+    eveng_images_addons_dir: "{{ test_root }}/addons"
+    eveng_images_fixpermissions_command: /bin/true
+    eveng_images_list:
+      - name: iol-with-licence.tar.gz
+        type: iol
+        url: https://example.invalid/iol-with-licence.tar.gz
+
+  tasks:
+    - name: Reset test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Create fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ eveng_images_cache_dir }}"
+        - "{{ test_root }}/fixture"
+        - "{{ eveng_images_addons_dir }}"
+
+    - name: Create fixture IOL binary
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture/i86bi-linux-test.bin"
+        content: fixture
+        mode: "0755"
+
+    - name: Create forbidden embedded licence
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture/iourc"
+        content: |
+          [license]
+          test-host = 0000000000000000;
+        mode: "0600"
+
+    - name: Build IOL archive with embedded licence
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - "{{ eveng_images_cache_dir }}/iol-with-licence.tar.gz"
+          - -C
+          - "{{ test_root }}/fixture"
+          - i86bi-linux-test.bin
+          - iourc
+      changed_when: true
+
+    - name: Exercise protected IOL archive handling
+      block:
+        - name: Run archive installer
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_images
+            tasks_from: install
+
+        - name: Fail when embedded licence was accepted
+          ansible.builtin.fail:
+            msg: Embedded IOL licence material was accepted unexpectedly.
+      rescue:
+        - name: Record expected rejection
+          ansible.builtin.set_fact:
+            eveng_images_embedded_iourc_rejected: true
+
+    - name: Require embedded licence rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_images_embedded_iourc_rejected | default(false) | bool
+
+    - name: Remove test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

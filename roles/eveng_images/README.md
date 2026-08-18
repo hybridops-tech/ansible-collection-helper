@@ -145,8 +145,8 @@ After installation, `/opt/unetlab/addons/` is normalised to `root:root` ownershi
 ### 3.4 IOL licence material
 
 An IOL binary and its licence are separate inputs. The role places authorised
-licence content at `/opt/unetlab/addons/iol/bin/iourc` before EVE-NG repairs
-the addons permissions:
+licence content at `/opt/unetlab/addons/iol/bin/iourc` with restricted
+permissions:
 
 ```yaml
 eveng_images_iol_license_required: true

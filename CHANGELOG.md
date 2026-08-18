@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Added
+
+- Added protected placement and validation of operator-supplied EVE-NG IOL
+  licence material without including it in reports or lab archives.
 
 ## [0.1.8] - 2026-07-17
 

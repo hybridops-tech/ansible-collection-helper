@@ -19,7 +19,7 @@
     # The role contract fixes these to root. The direct task fixture runs
     # unprivileged and overrides ownership only to exercise placement safely.
     eveng_images_iol_license_owner: "{{ lookup('env', 'USER') }}"
-    eveng_images_iol_license_group: "{{ lookup('env', 'USER') }}"
+    eveng_images_iol_license_group: "{{ lookup('pipe', 'id -gn') }}"
     eveng_images_list:
       - name: linux-test.tar.gz
         type: qemu
@@ -78,6 +78,9 @@
         that:
           - eveng_images_test_installed_disk.stat.exists
           - eveng_images_test_iol_license.stat.isreg
+          - eveng_images_test_iol_license.stat.mode == '0640'
+          - eveng_images_test_iol_license.stat.pw_name == eveng_images_iol_license_owner
+          - eveng_images_test_iol_license.stat.gr_name == eveng_images_iol_license_group
           - eveng_images_test_iol_license.stat.size > 0
           - eveng_images_iol_license_ready | bool
 

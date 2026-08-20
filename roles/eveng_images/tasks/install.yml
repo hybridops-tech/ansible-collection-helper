@@ -134,6 +134,39 @@
   ansible.builtin.command: "{{ eveng_images_fixpermissions_command }}"
   changed_when: true
 
+- name: Install operator-supplied IOL licence material
+  ansible.builtin.copy:
+    dest: "{{ eveng_images_iol_license_path }}"
+    content: "{{ eveng_images_iol_license_content | trim }}\n"
+    owner: "{{ eveng_images_iol_license_owner }}"
+    group: "{{ eveng_images_iol_license_group }}"
+    mode: "0640"
+  when: eveng_images_iol_license_content | string | length > 0
+  no_log: true
+
+- name: Verify IOL licence placement
+  ansible.builtin.stat:
+    path: "{{ eveng_images_iol_license_path }}"
+  register: eveng_images_iol_license_stat
+  when: eveng_images_iol_license_content | string | length > 0
+
+- name: Require installed IOL licence material
+  ansible.builtin.assert:
+    that:
+      - eveng_images_iol_license_stat.stat.isreg | default(false)
+      - eveng_images_iol_license_stat.stat.mode == '0640'
+      - eveng_images_iol_license_stat.stat.pw_name == eveng_images_iol_license_owner
+      - eveng_images_iol_license_stat.stat.gr_name == eveng_images_iol_license_group
+      - eveng_images_iol_license_stat.stat.size | default(0) > 0
+    fail_msg: "The operator-supplied IOL licence file was not installed."
+  when: eveng_images_iol_license_content | string | length > 0
+
+- name: Publish IOL licence readiness without exposing material
+  ansible.builtin.set_fact:
+    eveng_images_iol_license_ready: >-
+      {{ eveng_images_iol_license_stat.stat.isreg | default(false) }}
+  when: eveng_images_iol_license_content | string | length > 0
+
 - name: Verify every image produced installed content
   ansible.builtin.stat:
     path: "{{ item }}"

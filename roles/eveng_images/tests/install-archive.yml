@@ -13,10 +13,20 @@
     eveng_images_fixpermissions_command: /bin/true
     eveng_images_raw_qemu_layout: foldered
     eveng_images_raw_qemu_disk_name: virtioa.qcow2
+    eveng_images_iol_license_content: |
+      [license]
+      test-host = 0000000000000000;
+    # The role contract fixes these to root. The direct task fixture runs
+    # unprivileged and overrides ownership only to exercise placement safely.
+    eveng_images_iol_license_owner: "{{ lookup('env', 'USER') }}"
+    eveng_images_iol_license_group: "{{ lookup('pipe', 'id -gn') }}"
     eveng_images_list:
       - name: linux-test.tar.gz
         type: qemu
         url: https://example.invalid/linux-test.tar.gz
+      - name: iol-test.tar.gz
+        type: iol
+        url: https://example.invalid/iol-test.tar.gz
 
   tasks:
     - name: Reset test directory
@@ -32,6 +42,7 @@
       loop:
         - "{{ eveng_images_cache_dir }}"
         - "{{ test_root }}/fixture/linux-test"
+        - "{{ eveng_images_addons_dir }}/iol/bin"
 
     - name: Create fixture disk
       ansible.builtin.copy:
@@ -50,6 +61,23 @@
           - linux-test
       changed_when: true
 
+    - name: Create fixture IOL binary
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture/i86bi-linux-test.bin"
+        content: fixture
+        mode: "0755"
+
+    - name: Build root-layout IOL fixture archive
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - "{{ eveng_images_cache_dir }}/iol-test.tar.gz"
+          - -C
+          - "{{ test_root }}/fixture"
+          - i86bi-linux-test.bin
+      changed_when: true
+
     - name: Run archive installer
       ansible.builtin.include_role:
         name: hybridops.helper.eveng_images
@@ -60,10 +88,27 @@
         path: "{{ eveng_images_addons_dir }}/qemu/linux-test/virtioa.qcow2"
       register: eveng_images_test_installed_disk
 
+    - name: Check installed IOL licence
+      ansible.builtin.stat:
+        path: "{{ eveng_images_addons_dir }}/iol/bin/iourc"
+      register: eveng_images_test_iol_license
+
+    - name: Check installed IOL binary
+      ansible.builtin.stat:
+        path: "{{ eveng_images_addons_dir }}/iol/bin/i86bi-linux-test.bin"
+      register: eveng_images_test_iol_binary
+
     - name: Require installed disk
       ansible.builtin.assert:
         that:
           - eveng_images_test_installed_disk.stat.exists
+          - eveng_images_test_iol_binary.stat.isreg
+          - eveng_images_test_iol_license.stat.isreg
+          - eveng_images_test_iol_license.stat.mode == '0640'
+          - eveng_images_test_iol_license.stat.pw_name == eveng_images_iol_license_owner
+          - eveng_images_test_iol_license.stat.gr_name == eveng_images_iol_license_group
+          - eveng_images_test_iol_license.stat.size > 0
+          - eveng_images_iol_license_ready | bool
 
     - name: Remove test directory
       ansible.builtin.file:

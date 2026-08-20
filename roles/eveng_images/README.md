@@ -15,6 +15,7 @@ The role:
 - Caches content on the EVE-NG host.
 - Installs images into `/opt/unetlab/addons/*` with predictable layouts.
 - Emits logs and reports suitable for review, CI, and troubleshooting.
+- Places an operator-supplied IOL licence file when IOL nodes require one.
 
 Typical usage includes ad-hoc lab builds, CI smoke tests, and governed platform runs where image state and provenance require documentation.
 
@@ -138,8 +139,31 @@ Behaviour:
   - Text, JSON and XML responses are rejected before installation.
   - IOL: `/opt/unetlab/addons/iol/bin/<basename>`
   - Dynamips: `/opt/unetlab/addons/dynamips/<basename>`
+- **IOL archives**:
+  - Structured `iol/` or `/opt/unetlab/addons/iol/` layouts are preserved.
+  - Root or nested `*.bin` payloads are placed in `/opt/unetlab/addons/iol/bin/`.
+  - Embedded `iourc` files are rejected; licence material must use the encrypted
+    secret input described below.
 
 After installation, `/opt/unetlab/addons/` is normalised to `root:root` ownership with `0755` permissions.
+
+### 3.4 IOL licence material
+
+An IOL binary and its licence are separate inputs. The role places authorised
+licence content at `/opt/unetlab/addons/iol/bin/iourc` with restricted
+permissions:
+
+```yaml
+eveng_images_iol_license_required: true
+eveng_images_iol_license_content: "{{ lookup('env', 'EVENG_IOL_LICENSE') }}"
+```
+
+The content should come from an encrypted secret source. It is never
+downloaded, generated, written to reports, or included in the lab-definition
+and QEMU-overlay archives. Because an IOL licence is bound to the EVE-NG host
+identity, node startup remains the definitive acceptance check after a host is
+rebuilt. EVE-NG Pro installations that do not require an `iourc` can leave the
+two inputs at their defaults.
 
 ---
 
@@ -327,6 +351,8 @@ as part of the run record.
 - Raw image handling is controlled by `eveng_images_raw_qemu_layout`:
   - `generic` for existing third-party layouts.
   - `foldered` for a consistent “one directory per image” layout.
+- Operator-supplied IOL licence content is handled separately from images and
+  is not retained in ordinary lab archives.
 
 ---
 

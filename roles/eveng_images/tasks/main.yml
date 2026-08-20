@@ -1,6 +1,9 @@
 ---
 # Main orchestrator for EVE-NG image deployment
 
+- name: Validate EVE-NG image settings
+  ansible.builtin.include_tasks: validate.yml
+
 - name: Ensure EVE-NG directories exist
   ansible.builtin.file:
     path: "{{ eveng_images_addons_dir }}/{{ item }}"

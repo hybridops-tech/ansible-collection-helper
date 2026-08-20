@@ -66,6 +66,39 @@
             ;;
         esac
 
+        if [ "$image_type" = "iol" ]; then
+          if find "$work_dir" -type f \( -iname 'iourc' -o -iname '.iourc' \) -print -quit \
+            | grep -q .; then
+            printf 'IOL licence material must be supplied through the encrypted secret input: %s\n' "$archive" >&2
+            exit 1
+          fi
+
+          if [ -d "$work_dir/opt/unetlab/addons/iol" ]; then
+            source_dir="$work_dir/opt/unetlab/addons/iol"
+            cp -a "$source_dir/." "$destination/"
+            installed_path="$destination"
+          elif [ -d "$work_dir/iol" ]; then
+            source_dir="$work_dir/iol"
+            cp -a "$source_dir/." "$destination/"
+            installed_path="$destination"
+          else
+            mapfile -t iol_binaries < <(find "$work_dir" -type f -iname '*.bin' -print | sort)
+            iol_binary_count="$(printf '%s\n' "${iol_binaries[@]}" | sed '/^$/d' | wc -l | tr -d ' ')"
+            if [ "$iol_binary_count" -eq 0 ]; then
+              printf 'IOL archive contains no .bin image: %s\n' "$archive" >&2
+              exit 1
+            fi
+            mkdir -p "$destination/bin"
+            for binary in "${iol_binaries[@]}"; do
+              cp -f "$binary" "$destination/bin/$(basename "$binary")"
+            done
+            installed_path="$destination/bin"
+          fi
+
+          printf '%s\n' "$installed_path"
+          exit 0
+        fi
+
         if [ -d "$work_dir/opt/unetlab/addons/$image_type" ]; then
           source_dir="$work_dir/opt/unetlab/addons/$image_type"
         elif [ -d "$work_dir/$image_type" ]; then

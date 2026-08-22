@@ -10,7 +10,7 @@
     test_root: /tmp/hybridops-eveng-images-install-test
     eveng_images_cache_dir: "{{ test_root }}/cache"
     eveng_images_addons_dir: "{{ test_root }}/addons"
-    eveng_images_fixpermissions_command: /bin/true
+    eveng_images_fixpermissions_command: "{{ test_root }}/fixpermissions"
     eveng_images_raw_qemu_layout: foldered
     eveng_images_raw_qemu_disk_name: virtioa.qcow2
     eveng_images_iol_license_content: |
@@ -43,6 +43,18 @@
         - "{{ eveng_images_cache_dir }}"
         - "{{ test_root }}/fixture/linux-test"
         - "{{ eveng_images_addons_dir }}/iol/bin"
+
+    - name: Create permission repair fixture
+      ansible.builtin.copy:
+        dest: "{{ eveng_images_fixpermissions_command }}"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          set -eu
+          test -f "{{ eveng_images_addons_dir }}/iol/bin/iourc"
+          chmod 0644 "{{ eveng_images_addons_dir }}/iol/bin/iourc"
+          chmod 0755 "{{ eveng_images_addons_dir }}/iol/bin/"*.bin
+          touch "{{ test_root }}/fixpermissions-ran"
 
     - name: Create fixture disk
       ansible.builtin.copy:
@@ -98,17 +110,24 @@
         path: "{{ eveng_images_addons_dir }}/iol/bin/i86bi-linux-test.bin"
       register: eveng_images_test_iol_binary
 
+    - name: Check permission repair execution
+      ansible.builtin.stat:
+        path: "{{ test_root }}/fixpermissions-ran"
+      register: eveng_images_test_fixpermissions
+
     - name: Require installed disk
       ansible.builtin.assert:
         that:
           - eveng_images_test_installed_disk.stat.exists
           - eveng_images_test_iol_binary.stat.isreg
+          - eveng_images_test_iol_binary.stat.executable
           - eveng_images_test_iol_license.stat.isreg
-          - eveng_images_test_iol_license.stat.mode == '0640'
+          - eveng_images_test_iol_license.stat.mode == '0644'
           - eveng_images_test_iol_license.stat.pw_name == eveng_images_iol_license_owner
           - eveng_images_test_iol_license.stat.gr_name == eveng_images_iol_license_group
           - eveng_images_test_iol_license.stat.size > 0
           - eveng_images_iol_license_ready | bool
+          - eveng_images_test_fixpermissions.stat.exists
 
     - name: Remove test directory
       ansible.builtin.file:

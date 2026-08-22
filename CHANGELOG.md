@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - No unreleased changes yet.
 
-## [0.1.9] - 2026-08-20
+## [0.1.9] - 2026-08-22
 
 ### Added
 
@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   rejected archives that embed licence material.
 - Scoped URL image installation to the declared download set so stale cache
   files from earlier runs are not validated or installed.
+- Installed `iourc` before EVE-NG repairs image permissions, normalised line
+  endings, and rejected licence material bound to another host.
+- Refreshed same-name URL cache entries when their source changes and removed
+  transient image caches unless retention is enabled explicitly.
 
 ## [0.1.8] - 2026-07-17
 

@@ -1,0 +1,50 @@
+---
+# purpose: Verify the transient image cache is removed after role execution
+# maintainer: HybridOps.Tech
+
+- name: Test EVE-NG image cache cleanup
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    test_root: /tmp/hybridops-eveng-images-cache-cleanup-test
+    eveng_images_cache_dir: "{{ test_root }}/cache"
+    eveng_images_keep_cache: false
+
+  tasks:
+    - name: Reset cache cleanup test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Create cache cleanup fixture
+      ansible.builtin.file:
+        path: "{{ eveng_images_cache_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create cached fixture file
+      ansible.builtin.copy:
+        dest: "{{ eveng_images_cache_dir }}/fixture.tar.gz"
+        content: fixture
+        mode: "0644"
+
+    - name: Apply image cache retention policy
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_images
+        tasks_from: cleanup
+
+    - name: Inspect image cache
+      ansible.builtin.stat:
+        path: "{{ eveng_images_cache_dir }}"
+      register: eveng_images_cache_after_role
+
+    - name: Require cache cleanup
+      ansible.builtin.assert:
+        that:
+          - not eveng_images_cache_after_role.stat.exists
+
+    - name: Remove cache cleanup test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

@@ -38,8 +38,11 @@
         - name: Record expected rejection
           ansible.builtin.set_fact:
             eveng_images_mismatched_iourc_rejected: true
+            eveng_images_mismatched_iourc_error: "{{ ansible_failed_result.msg }}"
 
     - name: Require mismatched IOL licence rejection
       ansible.builtin.assert:
         that:
           - eveng_images_mismatched_iourc_rejected | default(false) | bool
+          - "'Hostname: eve-ng-test.' in eveng_images_mismatched_iourc_error"
+          - "'Host ID:' in eveng_images_mismatched_iourc_error"

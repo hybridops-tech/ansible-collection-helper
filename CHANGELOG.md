@@ -24,6 +24,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   files from earlier runs are not validated or installed.
 - Installed `iourc` before EVE-NG repairs image permissions, normalised line
   endings, and rejected licence material bound to another host.
+- Reported the EVE-NG hostname and Linux host ID when operator-supplied IOL
+  licence material does not match a rebuilt host.
 - Refreshed same-name URL cache entries when their source changes and removed
   transient image caches unless retention is enabled explicitly.
 

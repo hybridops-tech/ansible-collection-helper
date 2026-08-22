@@ -165,8 +165,9 @@ downloaded, generated, written to reports, or included in the lab-definition
 and QEMU-overlay archives. Because an IOL licence is bound to the EVE-NG host
 identity, node startup remains the definitive acceptance check after a host is
 rebuilt. The role rejects a document that does not contain a key for the
-observed EVE-NG hostname. EVE-NG Pro installations that do not require an
-`iourc` can leave the two inputs at their defaults.
+observed EVE-NG hostname and reports the hostname and binding-relevant Linux
+host ID required for authorised rehosting. EVE-NG Pro installations that do
+not require an `iourc` can leave the two inputs at their defaults.
 
 ---
 

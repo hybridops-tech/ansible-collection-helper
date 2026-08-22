@@ -64,15 +64,40 @@
   changed_when: false
   no_log: true
 
+- name: Read EVE-NG host identifier for IOL licence diagnostics
+  ansible.builtin.command: hostid
+  register: eveng_images_iol_hostid_command
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  when:
+    - eveng_images_iol_license_content | string | length > 0
+    - not (eveng_images_iol_license_matches_host | default(false) | bool)
+
+- name: Resolve EVE-NG host identifier for IOL licence diagnostics
+  ansible.builtin.set_fact:
+    eveng_images_iol_host_identifier: >-
+      {{
+        eveng_images_iol_hostid_command.stdout
+        | default('')
+        | trim
+        | default('unavailable', true)
+      }}
+  when:
+    - eveng_images_iol_license_content | string | length > 0
+    - not (eveng_images_iol_license_matches_host | default(false) | bool)
+  changed_when: false
+
 - name: Require IOL licence binding for this EVE-NG host
   ansible.builtin.assert:
     that:
       - eveng_images_iol_license_matches_host | bool
     fail_msg: >-
-      The supplied iourc document does not contain a licence entry for the
-      EVE-NG hostname
-      {{ eveng_images_iol_license_host_keys | join(' or ') }}. Generate the
-      licence for this host and update EVENG_IOL_LICENSE before rerunning.
+      The supplied iourc document does not contain a licence entry for this
+      EVE-NG host. Hostname:
+      {{ eveng_images_iol_license_host_keys | first }}. Host ID:
+      {{ eveng_images_iol_host_identifier | default('unavailable') }}. Obtain
+      an authorised iourc for this host, update EVENG_IOL_LICENSE, and rerun.
   when:
     - eveng_images_iol_license_content | string | length > 0
     - eveng_images_iol_license_host_keys | default([]) | length > 0

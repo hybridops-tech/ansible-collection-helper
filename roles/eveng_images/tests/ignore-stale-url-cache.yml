@@ -1,0 +1,71 @@
+---
+# purpose: Verify URL deployments ignore undeclared files left in the image cache
+# maintainer: HybridOps.Tech
+
+- name: Test EVE-NG URL cache scoping
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    test_root: /tmp/hybridops-eveng-images-stale-cache-test
+    eveng_images_cache_dir: "{{ test_root }}/cache"
+    eveng_images_generate_report: false
+    eveng_images_list:
+      - name: requested-iol.tar.gz
+        type: iol
+        url: "file://{{ test_root }}/source/requested-iol.tar.gz"
+
+  tasks:
+    - name: Reset cache scoping test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Create cache scoping fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ test_root }}/cache"
+        - "{{ test_root }}/fixture/iol/bin"
+        - "{{ test_root }}/source"
+
+    - name: Create requested IOL fixture
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture/iol/bin/i86bi-linux-test.bin"
+        content: fixture
+        mode: "0755"
+
+    - name: Build requested IOL archive
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - "{{ test_root }}/source/requested-iol.tar.gz"
+          - -C
+          - "{{ test_root }}/fixture"
+          - iol
+      changed_when: true
+
+    - name: Create stale undeclared cache file
+      ansible.builtin.copy:
+        dest: "{{ eveng_images_cache_dir }}/stale-invalid.qcow2"
+        content: "<html>stale cache entry</html>"
+        mode: "0644"
+
+    - name: Run URL download tasks
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_images
+        tasks_from: download-url
+
+    - name: Require requested-only download metadata
+      ansible.builtin.assert:
+        that:
+          - eveng_images_downloaded_files | length == 1
+          - eveng_images_downloaded_files[0].path | basename == 'requested-iol.tar.gz'
+
+    - name: Remove cache scoping test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

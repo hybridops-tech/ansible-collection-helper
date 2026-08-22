@@ -18,10 +18,15 @@
     - iol/lib
     - dynamips
 
-- name: Download images
-  ansible.builtin.include_tasks: "download-{{ eveng_images_source }}.yml"
-  when: eveng_images_download | default(true)
+- name: Process EVE-NG images
+  block:
+    - name: Download images
+      ansible.builtin.include_tasks: "download-{{ eveng_images_source }}.yml"
+      when: eveng_images_download | default(true)
 
-- name: Install images
-  ansible.builtin.include_tasks: install.yml
-  when: eveng_images_install | default(true)
+    - name: Install images
+      ansible.builtin.include_tasks: install.yml
+      when: eveng_images_install | default(true)
+  always:
+    - name: Apply image cache retention policy
+      ansible.builtin.include_tasks: cleanup.yml

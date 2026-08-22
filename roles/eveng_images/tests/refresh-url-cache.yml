@@ -1,0 +1,114 @@
+---
+# purpose: Verify a cached image is refreshed when its source URL changes
+# maintainer: HybridOps.Tech
+
+- name: Test EVE-NG URL cache identity
+  hosts: localhost
+  connection: local
+  gather_facts: true
+  vars:
+    test_root: /tmp/hybridops-eveng-images-cache-identity-test
+    eveng_images_cache_dir: "{{ test_root }}/cache"
+    eveng_images_keep_cache: true
+    eveng_images_generate_report: false
+
+  tasks:
+    - name: Reset cache identity test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Create cache identity fixture directories
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ eveng_images_cache_dir }}"
+        - "{{ test_root }}/source-one"
+        - "{{ test_root }}/source-two"
+        - "{{ test_root }}/fixture-one"
+        - "{{ test_root }}/fixture-two"
+
+    - name: Create first fixture
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture-one/revision.txt"
+        content: first
+        mode: "0644"
+
+    - name: Create second fixture
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture-two/revision.txt"
+        content: second
+        mode: "0644"
+
+    - name: Build source archives
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - "{{ test_root }}/source-{{ item }}/shared-image.tar.gz"
+          - -C
+          - "{{ test_root }}/fixture-{{ item }}"
+          - revision.txt
+      loop:
+        - one
+        - two
+      changed_when: true
+
+    - name: Create stale cache entry without source identity
+      ansible.builtin.copy:
+        dest: "{{ eveng_images_cache_dir }}/shared-image.tar.gz"
+        content: stale
+        mode: "0644"
+
+    - name: Download first source over legacy cache entry
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_images
+        tasks_from: download-url
+      vars:
+        eveng_images_list:
+          - name: shared-image.tar.gz
+            type: qemu
+            url: "file://{{ test_root }}/source-one/shared-image.tar.gz"
+
+    - name: Read first cached revision
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -xOzf
+          - "{{ eveng_images_cache_dir }}/shared-image.tar.gz"
+          - revision.txt
+      register: eveng_images_first_cached_revision
+      changed_when: false
+
+    - name: Download changed source with the same image name
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_images
+        tasks_from: download-url
+      vars:
+        eveng_images_list:
+          - name: shared-image.tar.gz
+            type: qemu
+            url: "file://{{ test_root }}/source-two/shared-image.tar.gz"
+
+    - name: Read refreshed cached revision
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -xOzf
+          - "{{ eveng_images_cache_dir }}/shared-image.tar.gz"
+          - revision.txt
+      register: eveng_images_refreshed_cached_revision
+      changed_when: false
+
+    - name: Require source-aware cache refresh
+      ansible.builtin.assert:
+        that:
+          - eveng_images_first_cached_revision.stdout == 'first'
+          - eveng_images_refreshed_cached_revision.stdout == 'second'
+
+    - name: Remove cache identity test directory
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

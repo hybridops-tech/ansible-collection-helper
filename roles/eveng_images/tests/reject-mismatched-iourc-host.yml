@@ -1,0 +1,45 @@
+---
+- name: Reject an iourc document bound to another EVE-NG host
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_hostname: eve-ng-test
+    ansible_fqdn: eve-ng-test.example.invalid
+    eveng_images_addons_dir: /opt/unetlab/addons
+    eveng_images_iol_license_content: |
+      [license]
+      eve-ng-test = 0000000000000000;
+
+  tasks:
+    - name: Accept an iourc document bound to this host
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_images
+        tasks_from: validate
+
+    - name: Replace fixture with a mismatched host binding
+      ansible.builtin.set_fact:
+        eveng_images_iol_license_content: |
+          [license]
+          another-host = 0000000000000000;
+      no_log: true
+
+    - name: Exercise IOL licence host validation
+      block:
+        - name: Run image settings validation
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_images
+            tasks_from: validate
+
+        - name: Fail when a mismatched host is accepted
+          ansible.builtin.fail:
+            msg: "A mismatched IOL licence host was accepted."
+      rescue:
+        - name: Record expected rejection
+          ansible.builtin.set_fact:
+            eveng_images_mismatched_iourc_rejected: true
+
+    - name: Require mismatched IOL licence rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_images_mismatched_iourc_rejected | default(false) | bool

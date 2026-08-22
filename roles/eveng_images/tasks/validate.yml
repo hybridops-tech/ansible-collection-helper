@@ -28,3 +28,51 @@
     fail_msg: "The supplied IOL licence file is not a valid iourc document."
   when: eveng_images_iol_license_content | string | length > 0
   no_log: true
+
+- name: Resolve EVE-NG host keys for IOL licence validation
+  ansible.builtin.set_fact:
+    eveng_images_iol_license_host_keys: >-
+      {{
+        [
+          ansible_hostname | default(''),
+          ansible_fqdn | default('')
+        ]
+        | reject('equalto', '')
+        | unique
+        | list
+      }}
+  when: eveng_images_iol_license_content | string | length > 0
+  changed_when: false
+
+- name: Check IOL licence binding for this EVE-NG host
+  ansible.builtin.set_fact:
+    eveng_images_iol_license_matches_host: >-
+      {{
+        (
+          eveng_images_iol_license_content
+          | regex_search(
+          '(?im)^[ ]*(?:'
+          ~ (eveng_images_iol_license_host_keys | map('regex_escape') | join('|'))
+          ~ ')[ ]*=[ ]*[0-9a-f]+;[ ]*$'
+          )
+        )
+        is not none
+      }}
+  when:
+    - eveng_images_iol_license_content | string | length > 0
+    - eveng_images_iol_license_host_keys | default([]) | length > 0
+  changed_when: false
+  no_log: true
+
+- name: Require IOL licence binding for this EVE-NG host
+  ansible.builtin.assert:
+    that:
+      - eveng_images_iol_license_matches_host | bool
+    fail_msg: >-
+      The supplied iourc document does not contain a licence entry for the
+      EVE-NG hostname
+      {{ eveng_images_iol_license_host_keys | join(' or ') }}. Generate the
+      licence for this host and update EVENG_IOL_LICENSE before rerunning.
+  when:
+    - eveng_images_iol_license_content | string | length > 0
+    - eveng_images_iol_license_host_keys | default([]) | length > 0

@@ -145,13 +145,15 @@ Behaviour:
   - Embedded `iourc` files are rejected; licence material must use the encrypted
     secret input described below.
 
-After installation, `/opt/unetlab/addons/` is normalised to `root:root` ownership with `0755` permissions.
+After installation, the role runs EVE-NG's permission repair. Directories and
+IOL binaries are executable; ordinary files, including `iourc`, use mode
+`0644`.
 
 ### 3.4 IOL licence material
 
 An IOL binary and its licence are separate inputs. The role places authorised
-licence content at `/opt/unetlab/addons/iol/bin/iourc` with restricted
-permissions:
+licence content at `/opt/unetlab/addons/iol/bin/iourc` before EVE-NG repairs
+the image-tree permissions:
 
 ```yaml
 eveng_images_iol_license_required: true
@@ -162,8 +164,9 @@ The content should come from an encrypted secret source. It is never
 downloaded, generated, written to reports, or included in the lab-definition
 and QEMU-overlay archives. Because an IOL licence is bound to the EVE-NG host
 identity, node startup remains the definitive acceptance check after a host is
-rebuilt. EVE-NG Pro installations that do not require an `iourc` can leave the
-two inputs at their defaults.
+rebuilt. The role rejects a document that does not contain a key for the
+observed EVE-NG hostname. EVE-NG Pro installations that do not require an
+`iourc` can leave the two inputs at their defaults.
 
 ---
 

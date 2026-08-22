@@ -1,0 +1,9 @@
+---
+# purpose: Apply the EVE-NG image cache retention policy
+# maintainer: HybridOps.Tech
+
+- name: Remove image cache
+  ansible.builtin.file:
+    path: "{{ eveng_images_cache_dir }}"
+    state: absent
+  when: not (eveng_images_keep_cache | default(false) | bool)

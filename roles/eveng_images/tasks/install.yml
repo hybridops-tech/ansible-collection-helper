@@ -130,19 +130,26 @@
     loop_var: image_detection
     label: "{{ image_detection.item.path | basename }}"
 
-- name: Repair EVE-NG image permissions
-  ansible.builtin.command: "{{ eveng_images_fixpermissions_command }}"
-  changed_when: true
-
 - name: Install operator-supplied IOL licence material
   ansible.builtin.copy:
     dest: "{{ eveng_images_iol_license_path }}"
-    content: "{{ eveng_images_iol_license_content | trim }}\n"
+    content: >-
+      {{
+        eveng_images_iol_license_content
+        | string
+        | replace('\r\n', '\n')
+        | replace('\r', '\n')
+        | trim
+      }}{{ '\n' }}
     owner: "{{ eveng_images_iol_license_owner }}"
     group: "{{ eveng_images_iol_license_group }}"
-    mode: "0640"
+    mode: "0644"
   when: eveng_images_iol_license_content | string | length > 0
   no_log: true
+
+- name: Repair EVE-NG image permissions
+  ansible.builtin.command: "{{ eveng_images_fixpermissions_command }}"
+  changed_when: true
 
 - name: Verify IOL licence placement
   ansible.builtin.stat:
@@ -154,7 +161,7 @@
   ansible.builtin.assert:
     that:
       - eveng_images_iol_license_stat.stat.isreg | default(false)
-      - eveng_images_iol_license_stat.stat.mode == '0640'
+      - eveng_images_iol_license_stat.stat.mode == '0644'
       - eveng_images_iol_license_stat.stat.pw_name == eveng_images_iol_license_owner
       - eveng_images_iol_license_stat.stat.gr_name == eveng_images_iol_license_group
       - eveng_images_iol_license_stat.stat.size | default(0) > 0

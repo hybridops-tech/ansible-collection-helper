@@ -159,6 +159,32 @@
   become: false
   when: eveng_lab_archive_node_state_overlays | length > 0
 
+- name: Verify fetched EVE-NG node-state archive structure
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -tzf
+      - "{{ _eveng_lab_archive_node_state_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_node_state_controller_members
+  when: eveng_lab_archive_node_state_overlays | length > 0
+
+- name: Require every selected overlay in fetched node-state archive
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_node_state_controller_members.stdout_lines | sort
+        == eveng_lab_archive_node_state_overlays
+           | map(attribute='path')
+           | map('regex_replace', '^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '')
+           | sort
+    fail_msg: "Fetched EVE-NG node-state archive does not match the selected overlays"
+  delegate_to: localhost
+  become: false
+  when: eveng_lab_archive_node_state_overlays | length > 0
+
 - name: Calculate node-state archive checksum
   ansible.builtin.stat:
     path: "{{ _eveng_lab_archive_node_state_path }}"
@@ -206,7 +232,12 @@
           'archive_file':
             eveng_lab_archive_results.node_state_archive_path | basename,
           'sha256': eveng_lab_archive_results.node_state_sha256,
-          'files': eveng_lab_archive_results.node_state_files
+          'files': eveng_lab_archive_results.node_state_files,
+          'members': (
+            eveng_lab_archive_node_state_controller_members.stdout_lines
+            if eveng_lab_archive_results.node_state_included
+            else []
+          )
         }
       } | to_nice_json }}
   delegate_to: localhost

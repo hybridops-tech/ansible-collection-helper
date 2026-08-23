@@ -37,7 +37,9 @@ eveng_lab_archive_include_node_state: true
 ```
 
 All QEMU nodes must be stopped. The role validates each overlay and writes a
-checksummed companion archive without copying its vendor base image.
+checksummed companion archive without copying its vendor base image. Multi-disk
+nodes retain each writable overlay. Export succeeds only after both fetched
+archives have been read and their expected contents verified.
 
 Restore requires the companion archive checksum:
 

@@ -62,6 +62,17 @@
   delegate_to: localhost
   become: false
 
+- name: Verify fetched EVE-NG lab archive structure
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -tzf
+      - "{{ _eveng_lab_archive_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_controller_members
+
 - name: Calculate controller archive checksum
   ansible.builtin.stat:
     path: "{{ _eveng_lab_archive_path }}"
@@ -92,7 +103,8 @@
         'archive_file': _eveng_lab_archive_path | basename,
         'sha256': eveng_lab_archive_controller_stat.stat.checksum,
         'created_at': eveng_lab_archive_created_at.stdout,
-        'folders': eveng_lab_archive_folders
+        'folders': eveng_lab_archive_folders,
+        'member_count': eveng_lab_archive_controller_members.stdout_lines | length
       } | to_nice_json }}
   delegate_to: localhost
   become: false
@@ -106,6 +118,7 @@
       created_at: "{{ eveng_lab_archive_created_at.stdout }}"
       manifest_path: "{{ _eveng_lab_archive_path }}.json"
       folders: "{{ eveng_lab_archive_folders }}"
+      member_count: "{{ eveng_lab_archive_controller_members.stdout_lines | length }}"
 
 - name: Remove remote archive staging
   ansible.builtin.file:

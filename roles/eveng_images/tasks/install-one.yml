@@ -99,6 +99,37 @@
           exit 0
         fi
 
+        if [[ "$basename" =~ ^BIGIP-(.+)\.ALL\.qcow2\.zip$ ]]; then
+          image_version="${BASH_REMATCH[1],,}"
+          destination="$HYOPS_ADDONS_DIR/qemu/bigip-$image_version"
+          mapfile -t system_disks < <(
+            find "$work_dir" -type f -iname '*.qcow2' ! -iname '*datastor*' -print | sort
+          )
+          mapfile -t datastore_disks < <(
+            find "$work_dir" -type f -iname '*datastor*.qcow2' -print | sort
+          )
+          system_disk_count="$(printf '%s\n' "${system_disks[@]}" | sed '/^$/d' | wc -l | tr -d ' ')"
+          datastore_disk_count="$(printf '%s\n' "${datastore_disks[@]}" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+          if [ "$system_disk_count" -ne 1 ]; then
+            printf 'F5 BIG-IP archive must contain exactly one system disk: %s\n' "$archive" >&2
+            exit 1
+          fi
+          if [ "$datastore_disk_count" -gt 1 ]; then
+            printf 'F5 BIG-IP archive contains more than one datastore disk: %s\n' "$archive" >&2
+            exit 1
+          fi
+
+          mkdir -p "$destination"
+          cp -f "${system_disks[0]}" "$destination/virtioa.qcow2"
+          if [ "$datastore_disk_count" -eq 1 ]; then
+            cp -f "${datastore_disks[0]}" "$destination/virtiob.qcow2"
+          fi
+          installed_path="$destination"
+          printf '%s\n' "$installed_path"
+          exit 0
+        fi
+
         if [ -d "$work_dir/opt/unetlab/addons/$image_type" ]; then
           source_dir="$work_dir/opt/unetlab/addons/$image_type"
         elif [ -d "$work_dir/$image_type" ]; then

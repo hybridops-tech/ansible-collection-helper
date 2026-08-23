@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   licence material does not match a rebuilt host.
 - Refreshed same-name URL cache entries when their source changes and removed
   transient image caches unless retention is enabled explicitly.
+- Normalised F5 BIG-IP ZIP archives into an EVE-NG `bigip-` appliance directory
+  with deterministic system and datastore disk names.
 
 ## [0.1.8] - 2026-07-17
 

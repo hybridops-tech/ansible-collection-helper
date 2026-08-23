@@ -27,6 +27,9 @@
       - name: iol-test.tar.gz
         type: iol
         url: https://example.invalid/iol-test.tar.gz
+      - name: BIGIP-11.6.0.0.0.401.ALL.qcow2.zip
+        type: qemu
+        url: https://example.invalid/BIGIP-11.6.0.0.0.401.ALL.qcow2.zip
 
   tasks:
     - name: Reset test directory
@@ -42,6 +45,7 @@
       loop:
         - "{{ eveng_images_cache_dir }}"
         - "{{ test_root }}/fixture/linux-test"
+        - "{{ test_root }}/fixture/bigip"
         - "{{ eveng_images_addons_dir }}/iol/bin"
 
     - name: Create permission repair fixture
@@ -90,6 +94,29 @@
           - i86bi-linux-test.bin
       changed_when: true
 
+    - name: Create F5 BIG-IP system disk fixture
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture/bigip/BIGIP-11.6.0.0.0.401.qcow2"
+        content: system-disk
+        mode: "0644"
+
+    - name: Create F5 BIG-IP datastore fixture
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/fixture/bigip/BIGIP-11.6.0.0.0.401.DATASTOR.ALL.qcow2"
+        content: datastore-disk
+        mode: "0644"
+
+    - name: Build F5 BIG-IP ZIP fixture
+      ansible.builtin.command:
+        argv:
+          - zip
+          - -q
+          - -j
+          - "{{ eveng_images_cache_dir }}/BIGIP-11.6.0.0.0.401.ALL.qcow2.zip"
+          - "{{ test_root }}/fixture/bigip/BIGIP-11.6.0.0.0.401.qcow2"
+          - "{{ test_root }}/fixture/bigip/BIGIP-11.6.0.0.0.401.DATASTOR.ALL.qcow2"
+      changed_when: true
+
     - name: Run archive installer
       ansible.builtin.include_role:
         name: hybridops.helper.eveng_images
@@ -115,6 +142,16 @@
         path: "{{ test_root }}/fixpermissions-ran"
       register: eveng_images_test_fixpermissions
 
+    - name: Check installed F5 BIG-IP system disk
+      ansible.builtin.stat:
+        path: "{{ eveng_images_addons_dir }}/qemu/bigip-11.6.0.0.0.401/virtioa.qcow2"
+      register: eveng_images_test_bigip_system_disk
+
+    - name: Check installed F5 BIG-IP datastore
+      ansible.builtin.stat:
+        path: "{{ eveng_images_addons_dir }}/qemu/bigip-11.6.0.0.0.401/virtiob.qcow2"
+      register: eveng_images_test_bigip_datastore
+
     - name: Require installed disk
       ansible.builtin.assert:
         that:
@@ -128,6 +165,8 @@
           - eveng_images_test_iol_license.stat.size > 0
           - eveng_images_iol_license_ready | bool
           - eveng_images_test_fixpermissions.stat.exists
+          - eveng_images_test_bigip_system_disk.stat.isreg
+          - eveng_images_test_bigip_datastore.stat.isreg
 
     - name: Remove test directory
       ansible.builtin.file:

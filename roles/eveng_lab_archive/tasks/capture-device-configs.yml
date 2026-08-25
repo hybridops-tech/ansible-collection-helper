@@ -1,0 +1,107 @@
+---
+- name: Resolve EVE-NG lab search roots
+  ansible.builtin.set_fact:
+    eveng_lab_archive_config_search_roots: >-
+      {{
+        (
+          eveng_lab_archive_folders
+          | map('regex_replace', '^(.*)$', eveng_lab_archive_labs_root ~ '/\\1')
+          | list
+        )
+        if eveng_lab_archive_folders | length > 0
+        else [eveng_lab_archive_labs_root]
+      }}
+
+- name: Find EVE-NG lab definitions
+  ansible.builtin.find:
+    paths: "{{ eveng_lab_archive_config_search_roots }}"
+    patterns: "*.unl"
+    file_type: file
+    recurse: true
+    follow: false
+  register: eveng_lab_archive_config_lab_files
+
+- name: Select EVE-NG lab definitions
+  ansible.builtin.set_fact:
+    eveng_lab_archive_config_labs: >-
+      {{
+        eveng_lab_archive_config_lab_files.files
+        | map(attribute='path')
+        | sort
+        | list
+      }}
+    eveng_lab_archive_captured_labs: []
+
+- name: Read EVE-NG API credential
+  ansible.builtin.set_fact:
+    eveng_lab_archive_api_password: >-
+      {{ lookup('env', eveng_lab_archive_api_password_env) | default('', true) }}
+  no_log: true
+  when: eveng_lab_archive_config_labs | length > 0
+
+- name: Require EVE-NG API credential
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_api_password | default('') | string | length > 0
+    fail_msg: >-
+      {{ eveng_lab_archive_api_password_env }} is required to preserve saved
+      EVE-NG device configurations
+  when: eveng_lab_archive_config_labs | length > 0
+
+- name: Authenticate to the local EVE-NG API
+  block:
+    - name: Request EVE-NG API session
+      ansible.builtin.uri:
+        url: "{{ eveng_lab_archive_api_base_url | regex_replace('/+$', '') }}/api/auth/login"
+        method: POST
+        body_format: json
+        body:
+          username: "{{ eveng_lab_archive_api_username }}"
+          password: "{{ eveng_lab_archive_api_password }}"
+        return_content: true
+        status_code: 200
+        validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+        use_proxy: false
+      register: eveng_lab_archive_api_login
+      no_log: true
+      failed_when: >-
+        eveng_lab_archive_api_login.status | default(0) != 200
+        or eveng_lab_archive_api_login.json.status | default('') != 'success'
+  rescue:
+    - name: Stop preservation after EVE-NG API authentication failure
+      ansible.builtin.fail:
+        msg: >-
+          EVE-NG saved-configuration capture could not authenticate with
+          {{ eveng_lab_archive_api_username }} using
+          {{ eveng_lab_archive_api_password_env }}
+  when: eveng_lab_archive_config_labs | length > 0
+
+- name: Export saved configurations into EVE-NG lab definitions
+  block:
+    - name: Export saved configurations for each EVE-NG lab
+      ansible.builtin.include_tasks: capture-device-config.yml
+      loop: "{{ eveng_lab_archive_config_labs }}"
+      loop_control:
+        loop_var: eveng_lab_archive_config_lab
+        label: "{{ eveng_lab_archive_config_lab }}"
+  always:
+    - name: Close EVE-NG API session
+      ansible.builtin.uri:
+        url: >-
+          {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
+          }}/api/auth/logout
+        method: GET
+        headers:
+          Cookie: "{{ eveng_lab_archive_api_login.cookies_string }}"
+        status_code: 200
+        validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+        use_proxy: false
+      no_log: true
+      failed_when: false
+      when: eveng_lab_archive_config_labs | length > 0
+
+- name: Publish saved-configuration capture result
+  ansible.builtin.set_fact:
+    eveng_lab_archive_device_config_results:
+      captured: "{{ eveng_lab_archive_captured_labs | length > 0 }}"
+      labs: "{{ eveng_lab_archive_captured_labs }}"

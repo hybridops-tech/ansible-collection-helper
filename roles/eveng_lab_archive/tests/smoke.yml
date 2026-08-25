@@ -7,6 +7,7 @@
     test_root: /tmp/hyops-eveng-lab-archive-test
     test_node_state_root: /tmp/hyops-eveng-lab-node-state-test
     test_archive: /tmp/hyops-eveng-lab-archive-test-output/labs.tar.gz
+    test_api_port: 18765
   tasks:
     - name: Clear previous test data
       ansible.builtin.file:
@@ -26,9 +27,24 @@
             mode: "0775"
         - name: Write test lab definition
           ansible.builtin.copy:
-            dest: "{{ test_root }}/student/routing.unl"
+            dest: "{{ test_root }}/student/routing lab.unl"
             mode: "0664"
             content: "<lab name=\"routing\"/>\n"
+        - name: Start mock EVE-NG API
+          ansible.builtin.shell: >-
+            python3 {{ (playbook_dir ~ '/mock_eve_api.py') | quote }}
+            --labs-root {{ test_root | quote }}
+            --port {{ test_api_port | quote }}
+            >/tmp/hyops-eveng-mock-api.log 2>&1 & echo $!
+          args:
+            executable: /bin/bash
+          changed_when: true
+          register: eveng_lab_archive_mock_api
+        - name: Wait for mock EVE-NG API
+          ansible.builtin.wait_for:
+            host: 127.0.0.1
+            port: "{{ test_api_port }}"
+            timeout: 10
         - name: Create test node-state directory
           ansible.builtin.file:
             path: "{{ test_node_state_root }}/0/test-lab/1"
@@ -89,6 +105,9 @@
         eveng_lab_archive_include_node_state: true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_capture_device_configs: true
+        eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+        eveng_lab_archive_api_password_env: USER
 
     - name: Retain export checksum
       ansible.builtin.set_fact:
@@ -100,6 +119,8 @@
       ansible.builtin.assert:
         that:
           - eveng_lab_archive_results.node_state_files == 2
+          - eveng_lab_archive_results.device_configs_captured
+          - eveng_lab_archive_results.device_config_labs == ['student/routing lab.unl']
 
     - name: Repeat test lab export
       ansible.builtin.include_role:
@@ -115,6 +136,9 @@
         eveng_lab_archive_include_node_state: true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_capture_device_configs: true
+        eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+        eveng_lab_archive_api_password_env: USER
 
     - name: Require stable archive checksum
       ansible.builtin.assert:
@@ -123,6 +147,44 @@
           - >-
             eveng_lab_archive_results.node_state_sha256
             == eveng_lab_archive_test_node_state_checksum
+
+    - name: Reject a failed saved-configuration capture
+      block:
+        - name: Attempt export through an unavailable API path
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: export
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_remote_dir: "{{ test_root }}-staging"
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_capture_device_configs: true
+            eveng_lab_archive_api_base_url: >-
+              http://127.0.0.1:{{ test_api_port }}/unavailable
+            eveng_lab_archive_api_password_env: USER
+        - name: Reject successful export after failed capture
+          ansible.builtin.fail:
+            msg: "saved-configuration capture failure was accepted"
+      rescue:
+        - name: Record expected saved-configuration capture failure
+          ansible.builtin.set_fact:
+            eveng_lab_archive_capture_failure_observed: true
+
+    - name: Check retained archive after failed capture
+      ansible.builtin.stat:
+        path: "{{ test_archive }}"
+        checksum_algorithm: sha256
+      register: eveng_lab_archive_retained_archive
+
+    - name: Require fail-closed capture behavior
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_capture_failure_observed | default(false)
+          - >-
+            eveng_lab_archive_retained_archive.stat.checksum
+            == eveng_lab_archive_test_checksum
 
     - name: Remove test lab before restore
       ansible.builtin.file:
@@ -151,13 +213,21 @@
 
     - name: Verify restored test lab
       ansible.builtin.stat:
-        path: "{{ test_root }}/student/routing.unl"
+        path: "{{ test_root }}/student/routing lab.unl"
       register: eveng_lab_archive_restored_lab
+
+    - name: Read restored test lab
+      ansible.builtin.slurp:
+        path: "{{ test_root }}/student/routing lab.unl"
+      register: eveng_lab_archive_restored_lab_content
 
     - name: Require restored test lab
       ansible.builtin.assert:
         that:
           - eveng_lab_archive_restored_lab.stat.isreg
+          - >-
+            '<configs captured="true"/>' in
+            (eveng_lab_archive_restored_lab_content.content | b64decode)
 
     - name: Verify restored test node state
       ansible.builtin.command:
@@ -178,6 +248,15 @@
       changed_when: false
 
   post_tasks:
+    - name: Stop mock EVE-NG API
+      ansible.builtin.command:
+        argv:
+          - kill
+          - "{{ eveng_lab_archive_mock_api.stdout }}"
+      changed_when: true
+      failed_when: false
+      when: eveng_lab_archive_mock_api.stdout | default('') | length > 0
+
     - name: Remove test data
       ansible.builtin.file:
         path: "{{ item }}"

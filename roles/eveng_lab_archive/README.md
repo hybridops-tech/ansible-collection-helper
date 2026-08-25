@@ -16,6 +16,18 @@ An empty folder list exports the complete `/opt/unetlab/labs` tree. The role
 publishes the controller path and SHA-256 checksum in
 `eveng_lab_archive_results`.
 
+Saved device configurations can be refreshed in each lab definition before the
+archive is built:
+
+```yaml
+eveng_lab_archive_capture_device_configs: true
+eveng_lab_archive_api_password_env: EVENG_ADMIN_PASSWORD
+```
+
+The role uses EVE-NG's local API. A failed capture stops preservation before
+the execution host is released. Intended device changes must be saved to
+startup configuration before capture.
+
 ## Restore
 
 ```yaml

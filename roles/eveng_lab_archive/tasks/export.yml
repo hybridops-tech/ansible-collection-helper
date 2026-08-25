@@ -104,7 +104,11 @@
         'sha256': eveng_lab_archive_controller_stat.stat.checksum,
         'created_at': eveng_lab_archive_created_at.stdout,
         'folders': eveng_lab_archive_folders,
-        'member_count': eveng_lab_archive_controller_members.stdout_lines | length
+        'member_count': eveng_lab_archive_controller_members.stdout_lines | length,
+        'device_configs': {
+          'captured': eveng_lab_archive_device_config_results.captured,
+          'labs': eveng_lab_archive_device_config_results.labs
+        }
       } | to_nice_json }}
   delegate_to: localhost
   become: false
@@ -119,6 +123,9 @@
       manifest_path: "{{ _eveng_lab_archive_path }}.json"
       folders: "{{ eveng_lab_archive_folders }}"
       member_count: "{{ eveng_lab_archive_controller_members.stdout_lines | length }}"
+      device_configs_captured: >-
+        {{ eveng_lab_archive_device_config_results.captured }}
+      device_config_labs: "{{ eveng_lab_archive_device_config_results.labs }}"
 
 - name: Remove remote archive staging
   ansible.builtin.file:

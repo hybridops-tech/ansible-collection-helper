@@ -41,6 +41,10 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/api/auth/logout":
             self._reply(200, {"status": "success", "code": 200})
             return
+        self._reply(405, {"status": "fail", "message": "method not allowed"})
+
+    def do_PUT(self) -> None:
+        parsed = urlparse(self.path)
         prefix = "/api/labs/"
         suffix = "/nodes/export"
         if not parsed.path.startswith(prefix) or not parsed.path.endswith(suffix):

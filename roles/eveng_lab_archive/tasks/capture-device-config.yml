@@ -29,7 +29,7 @@
         url: >-
           {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
           }}/api/labs/{{ eveng_lab_archive_config_api_lab }}/nodes/export
-        method: GET
+        method: PUT
         headers:
           Cookie: "{{ eveng_lab_archive_api_login.cookies_string }}"
         return_content: true
@@ -54,4 +54,10 @@
       ansible.builtin.fail:
         msg: >-
           EVE-NG saved-configuration capture failed for
-          {{ eveng_lab_archive_config_relative_lab }}
+          {{ eveng_lab_archive_config_relative_lab }}.
+          API status={{ eveng_lab_archive_config_export.status | default('unknown') }};
+          message={{
+            eveng_lab_archive_config_export.json.message
+            | default(eveng_lab_archive_config_export.msg)
+            | default('no response from EVE-NG')
+          }}

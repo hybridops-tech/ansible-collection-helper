@@ -49,6 +49,7 @@
   when: eveng_lab_archive_config_labs | length > 0
 
 - name: Authenticate to the local EVE-NG API
+  when: eveng_lab_archive_config_labs | length > 0
   block:
     - name: Request EVE-NG API session
       ansible.builtin.uri:
@@ -74,7 +75,6 @@
           EVE-NG saved-configuration capture could not authenticate with
           {{ eveng_lab_archive_api_username }} using
           {{ eveng_lab_archive_api_password_env }}
-  when: eveng_lab_archive_config_labs | length > 0
 
 - name: Export saved configurations into EVE-NG lab definitions
   block:

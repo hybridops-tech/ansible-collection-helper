@@ -1,0 +1,106 @@
+---
+- name: Resolve restored EVE-NG API lab path
+  ansible.builtin.set_fact:
+    eveng_lab_archive_restored_relative_lab: >-
+      {{
+        eveng_lab_archive_restored_lab
+        | regex_replace(
+            '^' ~ (eveng_lab_archive_labs_root | regex_escape) ~ '/?',
+            ''
+          )
+      }}
+    eveng_lab_archive_restored_api_lab: >-
+      {{
+        eveng_lab_archive_restored_lab
+        | regex_replace(
+            '^' ~ (eveng_lab_archive_labs_root | regex_escape) ~ '/?',
+            ''
+          )
+        | urlencode
+        | replace('+', '%20')
+        | replace('%2F', '/')
+        | replace('%2f', '/')
+      }}
+
+- name: Inspect restored EVE-NG saved configurations
+  ansible.builtin.uri:
+    url: >-
+      {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
+      }}/api/labs/{{ eveng_lab_archive_restored_api_lab }}/configs
+    method: GET
+    headers:
+      Cookie: "{{ eveng_lab_archive_restore_api_login.cookies_string }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+    use_proxy: false
+  register: eveng_lab_archive_restored_configs
+  no_log: true
+  failed_when: >-
+    eveng_lab_archive_restored_configs.status | default(0) != 200
+    or eveng_lab_archive_restored_configs.json.status | default('') != 'success'
+
+- name: Select restored EVE-NG saved configurations
+  ansible.builtin.set_fact:
+    eveng_lab_archive_restored_config_nodes: >-
+      {{
+        eveng_lab_archive_restored_configs.json.data
+        | default({})
+        | dict2items
+        | selectattr('value.len', 'defined')
+        | selectattr('value.len', 'equalto', 1)
+        | map(attribute='key')
+        | list
+      }}
+
+- name: Enable restored EVE-NG saved configurations
+  ansible.builtin.uri:
+    url: >-
+      {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
+      }}/api/labs/{{ eveng_lab_archive_restored_api_lab }}/nodes/{{ item }}
+    method: PUT
+    headers:
+      Cookie: "{{ eveng_lab_archive_restore_api_login.cookies_string }}"
+    body_format: json
+    body:
+      config: 1
+    return_content: true
+    status_code: 201
+    validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+    use_proxy: false
+  loop: "{{ eveng_lab_archive_restored_config_nodes }}"
+  no_log: true
+  register: eveng_lab_archive_restored_config_activation
+  failed_when: >-
+    eveng_lab_archive_restored_config_activation.status | default(0) != 201
+    or eveng_lab_archive_restored_config_activation.json.status | default('') != 'success'
+
+- name: Wipe stale EVE-NG runtime state before saved-configuration boot
+  ansible.builtin.uri:
+    url: >-
+      {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
+      }}/api/labs/{{ eveng_lab_archive_restored_api_lab }}/nodes/wipe
+    method: GET
+    headers:
+      Cookie: "{{ eveng_lab_archive_restore_api_login.cookies_string }}"
+    return_content: true
+    status_code: 200
+    validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+    use_proxy: false
+  no_log: true
+  register: eveng_lab_archive_restored_config_wipe
+  failed_when: >-
+    eveng_lab_archive_restored_config_wipe.status | default(0) != 200
+    or eveng_lab_archive_restored_config_wipe.json.status | default('') != 'success'
+  when:
+    - eveng_lab_archive_restored_config_nodes | length > 0
+    - not eveng_lab_archive_restore_node_state | bool
+
+- name: Record activated EVE-NG saved configurations
+  ansible.builtin.set_fact:
+    eveng_lab_archive_activated_config_labs: >-
+      {{
+        eveng_lab_archive_activated_config_labs
+        + [eveng_lab_archive_restored_relative_lab]
+      }}
+  when: eveng_lab_archive_restored_config_nodes | length > 0

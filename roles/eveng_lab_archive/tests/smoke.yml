@@ -29,7 +29,9 @@
           ansible.builtin.copy:
             dest: "{{ test_root }}/student/routing lab.unl"
             mode: "0664"
-            content: "<lab name=\"routing\"/>\n"
+            content: >-
+              <lab name="routing"><topology><nodes><node id="1" name="R1"
+              config="0"/></nodes></topology></lab>
         - name: Start mock EVE-NG API
           ansible.builtin.shell: >-
             python3 {{ (playbook_dir ~ '/mock_eve_api.py') | quote }}
@@ -210,6 +212,8 @@
         eveng_lab_archive_node_state_expected_sha256: >-
           {{ eveng_lab_archive_test_node_state_checksum }}
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+        eveng_lab_archive_api_password_env: USER
 
     - name: Verify restored test lab
       ansible.builtin.stat:
@@ -226,7 +230,10 @@
         that:
           - eveng_lab_archive_restored_lab.stat.isreg
           - >-
-            '<configs captured="true"/>' in
+            'config="1"' in
+            (eveng_lab_archive_restored_lab_content.content | b64decode)
+          - >-
+            '<config id="1">' in
             (eveng_lab_archive_restored_lab_content.content | b64decode)
 
     - name: Verify restored test node state
@@ -246,6 +253,36 @@
           - -q
           - "{{ test_node_state_root }}/0/test-lab/1/virtiob.qcow2"
       changed_when: false
+
+    - name: Remove restored lab before configuration-only restore
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Restore test lab without node state
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_lab_archive
+      vars:
+        eveng_lab_archive_action: restore
+        eveng_lab_archive_labs_root: "{{ test_root }}"
+        eveng_lab_archive_folders: [student]
+        eveng_lab_archive_path: "{{ test_archive }}"
+        eveng_lab_archive_expected_sha256: "{{ eveng_lab_archive_test_checksum }}"
+        eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_restore_node_state: false
+        eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+        eveng_lab_archive_api_password_env: USER
+
+    - name: Verify stale runtime state was wiped
+      ansible.builtin.stat:
+        path: "{{ test_root }}/student/routing lab.unl.wipe-observed"
+      register: eveng_lab_archive_restore_wipe
+
+    - name: Require saved-configuration boot preparation
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_restore_wipe.stat.isreg
 
   post_tasks:
     - name: Stop mock EVE-NG API

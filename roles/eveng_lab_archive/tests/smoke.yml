@@ -124,6 +124,12 @@
           - eveng_lab_archive_results.device_configs_captured
           - eveng_lab_archive_results.device_config_labs == ['student/routing lab.unl']
 
+    - name: Change test lab before the next export
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/student/routing.unl"
+        mode: "0664"
+        content: "<lab name=\"routing-updated\"/>\n"
+
     - name: Repeat test lab export
       ansible.builtin.include_role:
         name: hybridops.helper.eveng_lab_archive
@@ -142,12 +148,39 @@
         eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
         eveng_lab_archive_api_password_env: USER
 
-    - name: Require stable archive checksum
+    - name: Require a distinct current archive generation
       ansible.builtin.assert:
         that:
-          - eveng_lab_archive_results.sha256 == eveng_lab_archive_test_checksum
+          - eveng_lab_archive_results.sha256 != eveng_lab_archive_test_checksum
           - >-
             eveng_lab_archive_results.node_state_sha256
+            == eveng_lab_archive_test_node_state_checksum
+
+    - name: Retain current export checksum
+      ansible.builtin.set_fact:
+        eveng_lab_archive_current_test_checksum: "{{ eveng_lab_archive_results.sha256 }}"
+
+    - name: Inspect retained EVE-NG fallback generation
+      ansible.builtin.stat:
+        path: "{{ item }}"
+        checksum_algorithm: sha256
+      loop:
+        - "{{ test_archive }}.previous"
+        - "{{ test_archive }}.previous.json"
+        - "{{ test_archive }}.node-state.tar.gz.previous"
+      register: eveng_lab_archive_previous_generation
+
+    - name: Require verified EVE-NG fallback generation
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_previous_generation.results[0].stat.isreg
+          - eveng_lab_archive_previous_generation.results[1].stat.isreg
+          - eveng_lab_archive_previous_generation.results[2].stat.isreg
+          - >-
+            eveng_lab_archive_previous_generation.results[0].stat.checksum
+            == eveng_lab_archive_test_checksum
+          - >-
+            eveng_lab_archive_previous_generation.results[2].stat.checksum
             == eveng_lab_archive_test_node_state_checksum
 
     - name: Reject a failed saved-configuration capture
@@ -186,7 +219,7 @@
           - eveng_lab_archive_capture_failure_observed | default(false)
           - >-
             eveng_lab_archive_retained_archive.stat.checksum
-            == eveng_lab_archive_test_checksum
+            == eveng_lab_archive_current_test_checksum
 
     - name: Remove test lab before restore
       ansible.builtin.file:
@@ -204,7 +237,8 @@
         eveng_lab_archive_labs_root: "{{ test_root }}"
         eveng_lab_archive_folders: [student]
         eveng_lab_archive_path: "{{ test_archive }}"
-        eveng_lab_archive_expected_sha256: "{{ eveng_lab_archive_test_checksum }}"
+        eveng_lab_archive_expected_sha256: >-
+          {{ eveng_lab_archive_current_test_checksum }}
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_restore_node_state: true
@@ -267,7 +301,8 @@
         eveng_lab_archive_labs_root: "{{ test_root }}"
         eveng_lab_archive_folders: [student]
         eveng_lab_archive_path: "{{ test_archive }}"
-        eveng_lab_archive_expected_sha256: "{{ eveng_lab_archive_test_checksum }}"
+        eveng_lab_archive_expected_sha256: >-
+          {{ eveng_lab_archive_current_test_checksum }}
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_restore_node_state: false

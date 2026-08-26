@@ -51,12 +51,12 @@
 - name: Fetch EVE-NG lab archive
   ansible.builtin.fetch:
     src: "{{ eveng_lab_archive_remote_dir }}/labs.tar.gz"
-    dest: "{{ _eveng_lab_archive_path }}"
+    dest: "{{ _eveng_lab_archive_candidate_path }}"
     flat: true
 
-- name: Protect controller archive
+- name: Protect candidate controller archive
   ansible.builtin.file:
-    path: "{{ _eveng_lab_archive_path }}"
+    path: "{{ _eveng_lab_archive_candidate_path }}"
     state: file
     mode: "0600"
   delegate_to: localhost
@@ -67,7 +67,7 @@
     argv:
       - tar
       - -tzf
-      - "{{ _eveng_lab_archive_path }}"
+      - "{{ _eveng_lab_archive_candidate_path }}"
   delegate_to: localhost
   become: false
   changed_when: false
@@ -75,7 +75,7 @@
 
 - name: Calculate controller archive checksum
   ansible.builtin.stat:
-    path: "{{ _eveng_lab_archive_path }}"
+    path: "{{ _eveng_lab_archive_candidate_path }}"
     checksum_algorithm: sha256
   delegate_to: localhost
   become: false
@@ -92,9 +92,9 @@
   changed_when: false
   register: eveng_lab_archive_created_at
 
-- name: Write controller archive manifest
+- name: Write candidate controller archive manifest
   ansible.builtin.copy:
-    dest: "{{ _eveng_lab_archive_path }}.json"
+    dest: "{{ _eveng_lab_archive_candidate_path }}.json"
     mode: "0600"
     content: >-
       {{ {

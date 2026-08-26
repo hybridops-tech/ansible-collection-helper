@@ -24,6 +24,15 @@
         )
       }}
 
+- name: Resolve EVE-NG archive generation paths
+  ansible.builtin.set_fact:
+    _eveng_lab_archive_candidate_path: "{{ _eveng_lab_archive_path }}.candidate"
+    _eveng_lab_archive_previous_path: "{{ _eveng_lab_archive_path }}.previous"
+    _eveng_lab_archive_node_state_candidate_path: >-
+      {{ _eveng_lab_archive_node_state_path }}.candidate
+    _eveng_lab_archive_node_state_previous_path: >-
+      {{ _eveng_lab_archive_node_state_path }}.previous
+
 - name: Validate EVE-NG lab archive settings
   ansible.builtin.assert:
     that:
@@ -106,6 +115,10 @@
   when:
     - eveng_lab_archive_action == 'export'
     - eveng_lab_archive_include_node_state | bool
+
+- name: Promote verified EVE-NG archive
+  ansible.builtin.include_tasks: promote.yml
+  when: eveng_lab_archive_action == 'export'
 
 - name: Restore EVE-NG labs
   ansible.builtin.include_tasks: restore.yml

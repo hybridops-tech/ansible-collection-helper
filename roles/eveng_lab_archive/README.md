@@ -28,6 +28,10 @@ The role uses EVE-NG's local API. A failed capture stops preservation before
 the execution host is released. Intended device changes must be saved to
 startup configuration before capture.
 
+Each export is staged and verified before it replaces the current archive. The
+previous verified generation is retained with a `.previous` suffix, including
+its manifest and node-state companion when present.
+
 ## Restore
 
 ```yaml

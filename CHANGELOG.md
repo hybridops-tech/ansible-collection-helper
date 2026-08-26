@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-- No unreleased changes yet.
+### Fixed
+
+- Staged and verified EVE-NG lab exports before promotion, retaining one
+  verified fallback generation with its manifest and node-state archive.
 
 ## [0.1.9] - 2026-08-22
 

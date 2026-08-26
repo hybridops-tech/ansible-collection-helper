@@ -138,21 +138,21 @@
 - name: Fetch EVE-NG node-state archive
   ansible.builtin.fetch:
     src: "{{ eveng_lab_archive_remote_dir }}/node-state.tar.gz"
-    dest: "{{ _eveng_lab_archive_node_state_path }}"
+    dest: "{{ _eveng_lab_archive_node_state_candidate_path }}"
     flat: true
   when: eveng_lab_archive_node_state_overlays | length > 0
 
-- name: Remove stale controller node-state archive
+- name: Remove stale candidate node-state archive
   ansible.builtin.file:
-    path: "{{ _eveng_lab_archive_node_state_path }}"
+    path: "{{ _eveng_lab_archive_node_state_candidate_path }}"
     state: absent
   delegate_to: localhost
   become: false
   when: eveng_lab_archive_node_state_overlays | length == 0
 
-- name: Protect controller node-state archive
+- name: Protect candidate controller node-state archive
   ansible.builtin.file:
-    path: "{{ _eveng_lab_archive_node_state_path }}"
+    path: "{{ _eveng_lab_archive_node_state_candidate_path }}"
     state: file
     mode: "0600"
   delegate_to: localhost
@@ -164,7 +164,7 @@
     argv:
       - tar
       - -tzf
-      - "{{ _eveng_lab_archive_node_state_path }}"
+      - "{{ _eveng_lab_archive_node_state_candidate_path }}"
   delegate_to: localhost
   become: false
   changed_when: false
@@ -187,7 +187,7 @@
 
 - name: Calculate node-state archive checksum
   ansible.builtin.stat:
-    path: "{{ _eveng_lab_archive_node_state_path }}"
+    path: "{{ _eveng_lab_archive_node_state_candidate_path }}"
     checksum_algorithm: sha256
   delegate_to: localhost
   become: false
@@ -215,9 +215,9 @@
         })
       }}
 
-- name: Update controller archive manifest with node state
+- name: Update candidate controller archive manifest with node state
   ansible.builtin.copy:
-    dest: "{{ _eveng_lab_archive_path }}.json"
+    dest: "{{ _eveng_lab_archive_candidate_path }}.json"
     mode: "0600"
     content: >-
       {{ {

@@ -184,3 +184,8 @@
   ansible.builtin.set_fact:
     eveng_images_installed_paths: >-
       {{ (eveng_images_installed_paths | default([])) + [eveng_images_installed_image.stdout_lines | last] }}
+    eveng_images_installed_types: >-
+      {{
+        (eveng_images_installed_types | default([]))
+        + [image_detection.stdout | trim | regex_replace('^(structured:|raw:)', '')]
+      }}

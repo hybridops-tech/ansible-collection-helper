@@ -89,10 +89,10 @@ Behaviour:
 
 ```yaml
 eveng_images_cache_dir: /tmp/eveng_images_cache
-eveng_images_keep_cache: false
+eveng_images_keep_cache: true
 ```
 
-All downloads and copies land in `eveng_images_cache_dir`. When `eveng_images_keep_cache: false`, the cache directory is removed after installation.
+All downloads and copies land in `eveng_images_cache_dir`. Cached content from the same source URL is reused by default. Set `eveng_images_keep_cache: false` to refresh downloads and remove the cache after installation.
 
 ### 3.2 File types and detection
 

@@ -50,7 +50,10 @@
   when: eveng_images_has_mega_downloads | bool
   block:
     - name: Check if MEGAcmd is installed
-      ansible.builtin.command: command -v mega-get
+      ansible.builtin.command:
+        argv:
+          - which
+          - mega-get
       register: eveng_images_megacmd_check
       failed_when: false
       changed_when: false
@@ -112,21 +115,64 @@
     fi
 
     DOWNLOAD_DIR="$(mktemp -d "${TMPDIR:-/tmp}/hyops-mega.XXXXXX")"
-    trap 'rm -rf "$DOWNLOAD_DIR"' EXIT
+    DOWNLOAD_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/hyops-mega-output.XXXXXX")"
+    MEGA_LOG="${HOME}/.megaCmd/megacmdserver.log"
+    MEGA_LOG_OFFSET=0
+    if [ -f "$MEGA_LOG" ]; then
+      MEGA_LOG_OFFSET="$(stat -c '%s' "$MEGA_LOG")"
+    fi
+
+    cleanup() {
+      if [ -n "${MEGA_PID:-}" ] && kill -0 "$MEGA_PID" 2>/dev/null; then
+        kill "$MEGA_PID" 2>/dev/null || true
+        wait "$MEGA_PID" 2>/dev/null || true
+      fi
+      rm -rf "$DOWNLOAD_DIR"
+      rm -f "$DOWNLOAD_OUTPUT"
+    }
+    trap cleanup EXIT
 
     log "Starting MEGA download for $FILENAME"
     log "URL: $URL"
     log "Timeout: 900 seconds"
 
-    timeout 900 mega-get "$URL" "$DOWNLOAD_DIR" 2>&1 || {
-      RC=$?
+    timeout --foreground --kill-after=5 900 \
+      mega-get "$URL" "$DOWNLOAD_DIR" >"$DOWNLOAD_OUTPUT" 2>&1 &
+    MEGA_PID=$!
+
+    while kill -0 "$MEGA_PID" 2>/dev/null; do
+      if [ -f "$MEGA_LOG" ]; then
+        CURRENT_LOG_SIZE="$(stat -c '%s' "$MEGA_LOG")"
+        if [ "$CURRENT_LOG_SIZE" -lt "$MEGA_LOG_OFFSET" ]; then
+          MEGA_LOG_OFFSET=0
+        fi
+        if tail -c "+$((MEGA_LOG_OFFSET + 1))" "$MEGA_LOG" \
+          | grep -Fq "Reached bandwidth quota"; then
+          kill "$MEGA_PID" 2>/dev/null || true
+          wait "$MEGA_PID" 2>/dev/null || true
+          mega-transfers -c -a --only-downloads >/dev/null 2>&1 || true
+          log "MEGA transfer quota reached; use another authorised source or retry after the quota resets."
+          exit 75
+        fi
+      fi
+      sleep 2
+    done
+
+    set +e
+    wait "$MEGA_PID"
+    RC=$?
+    set -e
+    MEGA_PID=""
+    cat "$DOWNLOAD_OUTPUT"
+
+    if [ $RC -ne 0 ]; then
       if [ $RC -eq 124 ]; then
         log "Download timed out after 900 seconds."
       else
         log "Download failed with error code $RC."
       fi
       exit $RC
-    }
+    fi
 
     sleep 2
 
@@ -167,7 +213,7 @@
         'mega-download-' ~ (item.url | hash('md5'))[:8] ~ '.tar.gz'
       ) }}
     HYOPS_IMAGE_URL: "{{ item.url }}"
-    HYOPS_KEEP_CACHE: "{{ eveng_images_keep_cache | default(false) | bool }}"
+    HYOPS_KEEP_CACHE: "{{ eveng_images_keep_cache | default(true) | bool }}"
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"
@@ -248,7 +294,7 @@
         'http-download-' ~ (item.url | hash('md5'))[:8] ~ '.tar.gz'
       ) }}
     HYOPS_IMAGE_URL: "{{ item.url }}"
-    HYOPS_KEEP_CACHE: "{{ eveng_images_keep_cache | default(false) | bool }}"
+    HYOPS_KEEP_CACHE: "{{ eveng_images_keep_cache | default(true) | bool }}"
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"

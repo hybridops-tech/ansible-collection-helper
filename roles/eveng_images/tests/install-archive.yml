@@ -167,6 +167,8 @@
           - eveng_images_test_fixpermissions.stat.exists
           - eveng_images_test_bigip_system_disk.stat.isreg
           - eveng_images_test_bigip_datastore.stat.isreg
+          - eveng_images_install_ready | bool
+          - eveng_images_installed_count | int == 3
 
     - name: Remove test directory
       ansible.builtin.file:

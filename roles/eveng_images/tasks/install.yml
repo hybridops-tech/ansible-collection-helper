@@ -198,3 +198,50 @@
     fail_msg: >-
       Installed {{ eveng_images_installed_paths | default([]) | length }} of
       {{ eveng_images_detected_types.results | default([]) | length }} requested image archives.
+
+- name: Discover installed IOL binaries
+  ansible.builtin.find:
+    paths: "{{ eveng_images_addons_dir }}/iol/bin"
+    patterns: "*.bin"
+    file_type: file
+    recurse: false
+  register: eveng_images_installed_iol_binaries
+  when: "'iol' in (eveng_images_installed_types | default([]))"
+
+- name: Require one installed IOL binary per requested archive
+  ansible.builtin.assert:
+    that:
+      - >-
+        (eveng_images_installed_iol_binaries.matched | default(0) | int)
+        >= ((eveng_images_installed_types | default([]) | select('equalto', 'iol') | list) | length)
+    fail_msg: >-
+      IOL image installation did not produce the expected binaries in
+      {{ eveng_images_addons_dir }}/iol/bin.
+  when: "'iol' in (eveng_images_installed_types | default([]))"
+
+- name: Check installed IOL binaries are executable
+  ansible.builtin.shell: |
+    set -euo pipefail
+    find "$HYOPS_IOL_BIN_DIR" -maxdepth 1 -type f -name '*.bin' ! -perm /111 -print -quit
+  args:
+    executable: /bin/bash
+  environment:
+    HYOPS_IOL_BIN_DIR: "{{ eveng_images_addons_dir }}/iol/bin"
+  register: eveng_images_non_executable_iol_binary
+  changed_when: false
+  when: "'iol' in (eveng_images_installed_types | default([]))"
+
+- name: Require executable IOL binaries
+  ansible.builtin.assert:
+    that:
+      - eveng_images_non_executable_iol_binary.stdout | trim | length == 0
+    fail_msg: >-
+      An installed IOL binary is not executable:
+      {{ eveng_images_non_executable_iol_binary.stdout | trim }}.
+  when: "'iol' in (eveng_images_installed_types | default([]))"
+
+- name: Publish verified image installation state
+  ansible.builtin.set_fact:
+    eveng_images_installed_count: "{{ eveng_images_installed_paths | default([]) | length }}"
+    eveng_images_install_ready: true
+  changed_when: false

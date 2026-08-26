@@ -1,0 +1,93 @@
+---
+# purpose: Verify that a MEGA transfer quota failure returns promptly
+# maintainer: HybridOps.Tech
+
+- name: Test EVE-NG MEGA quota handling
+  hosts: localhost
+  connection: local
+  become: false
+  gather_facts: true
+  environment:
+    HOME: "{{ test_root }}/home"
+    PATH: "{{ test_root }}/bin:{{ ansible_env.PATH }}"
+  vars:
+    test_root: /tmp/hybridops-eveng-images-mega-quota-test
+    eveng_images_addons_dir: "{{ test_root }}/addons"
+    eveng_images_cache_dir: "{{ test_root }}/cache"
+    eveng_images_keep_cache: true
+    eveng_images_install: false
+    eveng_images_generate_report: false
+    eveng_images_list:
+      - name: quota-test.tar.gz
+        type: qemu
+        url: https://mega.nz/file/quota-test
+
+  tasks:
+    - name: Clear previous test data
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent
+
+    - name: Prepare test commands and MEGAcmd state
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: directory
+        mode: "0755"
+      loop:
+        - "{{ test_root }}/bin"
+        - "{{ test_root }}/home/.megaCmd"
+
+    - name: Install quota-limited mega-get fixture
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/bin/mega-get"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          printf '%s\n' 'Reached bandwidth quota.' >>"$HOME/.megaCmd/megacmdserver.log"
+          sleep 60
+
+    - name: Install mega-transfers fixture
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/bin/mega-transfers"
+        mode: "0755"
+        content: |
+          #!/bin/sh
+          exit 0
+
+    - name: Record quota test start time
+      ansible.builtin.command: date +%s
+      register: eveng_images_quota_test_started
+      changed_when: false
+
+    - name: Require prompt MEGA quota rejection
+      block:
+        - name: Run EVE-NG image download against quota fixture
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_images
+            tasks_from: download-url.yml
+
+        - name: Reject unexpected quota acceptance
+          ansible.builtin.fail:
+            msg: "A quota-limited MEGA download was accepted."
+      rescue:
+        - name: Record MEGA quota rejection
+          ansible.builtin.set_fact:
+            eveng_images_quota_error: "{{ ansible_failed_result | to_json }}"
+
+    - name: Record quota test finish time
+      ansible.builtin.command: date +%s
+      register: eveng_images_quota_test_finished
+      changed_when: false
+
+    - name: Require actionable MEGA quota result
+      ansible.builtin.assert:
+        that:
+          - "'MEGA transfer quota reached' in eveng_images_quota_error"
+          - >-
+            (eveng_images_quota_test_finished.stdout | int)
+            - (eveng_images_quota_test_started.stdout | int) < 15
+
+    - name: Remove test data
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: absent

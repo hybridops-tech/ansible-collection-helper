@@ -20,14 +20,24 @@
       The EVE-NG IOL licence must use the fixed IOL destination and root
       ownership.
 
-- name: Validate operator-supplied IOL licence material
+- name: Check operator-supplied IOL licence structure
+  ansible.builtin.set_fact:
+    eveng_images_iol_license_document_valid: >-
+      {{
+        eveng_images_iol_license_content is string
+        and eveng_images_iol_license_content | trim
+          is match('(?s)^\[license\]\s+.+')
+      }}
+  when: eveng_images_iol_license_content | string | length > 0
+  changed_when: false
+  no_log: true
+
+- name: Require a valid operator-supplied IOL licence document
   ansible.builtin.assert:
     that:
-      - eveng_images_iol_license_content is string
-      - eveng_images_iol_license_content | trim is match('(?s)^\[license\]\s+.+')
+      - eveng_images_iol_license_document_valid | default(false) | bool
     fail_msg: "The supplied IOL licence file is not a valid iourc document."
   when: eveng_images_iol_license_content | string | length > 0
-  no_log: true
 
 - name: Resolve EVE-NG host keys for IOL licence validation
   ansible.builtin.set_fact:

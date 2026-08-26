@@ -5,6 +5,8 @@
 - Fail URL-based image runs when any requested archive is missing.
 - Isolate MEGA downloads so an existing cache file cannot be renamed for a later request.
 - Install detected archives into the EVE-NG addons tree and verify the resulting paths.
+- Publish image readiness only after installed paths and IOL executables pass verification.
+- Retain source-bound downloads by default and stop promptly when MEGA reports a transfer quota.
 
 ## [1.0.0] - 2026-01-13
 

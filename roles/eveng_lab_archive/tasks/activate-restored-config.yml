@@ -3,7 +3,7 @@
   ansible.builtin.set_fact:
     eveng_lab_archive_restored_relative_lab: >-
       {{
-        eveng_lab_archive_restored_lab
+        item
         | regex_replace(
             '^' ~ (eveng_lab_archive_labs_root | regex_escape) ~ '/?',
             ''
@@ -11,7 +11,7 @@
       }}
     eveng_lab_archive_restored_api_lab: >-
       {{
-        eveng_lab_archive_restored_lab
+        item
         | regex_replace(
             '^' ~ (eveng_lab_archive_labs_root | regex_escape) ~ '/?',
             ''
@@ -57,7 +57,7 @@
   ansible.builtin.uri:
     url: >-
       {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
-      }}/api/labs/{{ eveng_lab_archive_restored_api_lab }}/nodes/{{ item }}
+      }}/api/labs/{{ eveng_lab_archive_restored_api_lab }}/nodes/{{ eveng_lab_archive_restored_config_node }}
     method: PUT
     headers:
       Cookie: "{{ eveng_lab_archive_restore_api_login.cookies_string }}"
@@ -69,6 +69,9 @@
     validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
     use_proxy: false
   loop: "{{ eveng_lab_archive_restored_config_nodes }}"
+  loop_control:
+    loop_var: eveng_lab_archive_restored_config_node
+    label: "{{ eveng_lab_archive_restored_config_node }}"
   no_log: true
   register: eveng_lab_archive_restored_config_activation
   failed_when: >-

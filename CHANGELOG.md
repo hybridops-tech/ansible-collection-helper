@@ -7,10 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-26
+
+### Added
+
+- Added native EVE-NG device-configuration capture before preservation and
+  activation after restore.
+
+### Changed
+
+- Retained source-bound image downloads by default so interrupted image runs
+  can resume without repeating completed transfers.
+
 ### Fixed
 
 - Staged and verified EVE-NG lab exports before promotion, retaining one
   verified fallback generation with its manifest and node-state archive.
+- Required every requested image archive to produce verified installed content
+  before publishing readiness.
+- Stopped MEGA downloads promptly when the transfer quota is exhausted.
+- Avoided loop-variable collisions when a play restores EVE-NG lab state more
+  than once.
 
 ## [0.1.9] - 2026-08-22
 

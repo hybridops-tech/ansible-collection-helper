@@ -227,6 +227,10 @@
         'sha256': eveng_lab_archive_results.sha256,
         'created_at': eveng_lab_archive_results.created_at,
         'folders': eveng_lab_archive_results.folders,
+        'device_configs': {
+          'captured': eveng_lab_archive_results.device_configs_captured,
+          'labs': eveng_lab_archive_results.device_config_labs
+        },
         'node_state': {
           'included': eveng_lab_archive_results.node_state_included,
           'archive_file':

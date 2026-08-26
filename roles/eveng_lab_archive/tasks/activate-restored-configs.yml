@@ -1,0 +1,76 @@
+---
+- name: Find restored EVE-NG saved configurations
+  ansible.builtin.find:
+    paths: "{{ eveng_lab_archive_labs_root }}"
+    patterns: "*.unl"
+    file_type: file
+    recurse: true
+    follow: false
+    contains: '<config\s+id='
+    read_whole_file: true
+  register: eveng_lab_archive_restored_config_labs
+
+- name: Initialise restored EVE-NG saved-configuration result
+  ansible.builtin.set_fact:
+    eveng_lab_archive_activated_config_labs: []
+
+- name: Read EVE-NG API credential for restore
+  ansible.builtin.set_fact:
+    eveng_lab_archive_restore_api_password: >-
+      {{ lookup('env', eveng_lab_archive_api_password_env) | default('', true) }}
+  no_log: true
+  when: eveng_lab_archive_restored_config_labs.matched | default(0) | int > 0
+
+- name: Require EVE-NG API credential for saved-configuration restore
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_restore_api_password | default('') | string | length > 0
+    fail_msg: >-
+      {{ eveng_lab_archive_api_password_env }} is required to activate restored
+      EVE-NG saved configurations
+  when: eveng_lab_archive_restored_config_labs.matched | default(0) | int > 0
+
+- name: Activate restored EVE-NG saved configurations
+  when: eveng_lab_archive_restored_config_labs.matched | default(0) | int > 0
+  block:
+    - name: Authenticate to the local EVE-NG API for restore
+      ansible.builtin.uri:
+        url: >-
+          {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
+          }}/api/auth/login
+        method: POST
+        body_format: json
+        body:
+          username: "{{ eveng_lab_archive_api_username }}"
+          password: "{{ eveng_lab_archive_restore_api_password }}"
+        return_content: true
+        status_code: 200
+        validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+        use_proxy: false
+      register: eveng_lab_archive_restore_api_login
+      no_log: true
+      failed_when: >-
+        eveng_lab_archive_restore_api_login.status | default(0) != 200
+        or eveng_lab_archive_restore_api_login.json.status | default('') != 'success'
+
+    - name: Activate configurations for each restored EVE-NG lab
+      ansible.builtin.include_tasks: activate-restored-config.yml
+      loop: "{{ eveng_lab_archive_restored_config_labs.files | map(attribute='path') | sort | list }}"
+      loop_control:
+        loop_var: eveng_lab_archive_restored_lab
+        label: "{{ eveng_lab_archive_restored_lab }}"
+  always:
+    - name: Close EVE-NG API restore session
+      ansible.builtin.uri:
+        url: >-
+          {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
+          }}/api/auth/logout
+        method: GET
+        headers:
+          Cookie: "{{ eveng_lab_archive_restore_api_login.cookies_string }}"
+        status_code: 200
+        validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+        use_proxy: false
+      no_log: true
+      failed_when: false
+      when: eveng_lab_archive_restore_api_login is defined

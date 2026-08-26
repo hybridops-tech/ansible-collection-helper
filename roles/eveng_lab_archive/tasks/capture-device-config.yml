@@ -1,0 +1,63 @@
+---
+- name: Resolve EVE-NG API lab path
+  ansible.builtin.set_fact:
+    eveng_lab_archive_config_relative_lab: >-
+      {{
+        eveng_lab_archive_config_lab
+        | regex_replace(
+            '^' ~ (eveng_lab_archive_labs_root | regex_escape) ~ '/?',
+            ''
+          )
+      }}
+    eveng_lab_archive_config_api_lab: >-
+      {{
+        eveng_lab_archive_config_lab
+        | regex_replace(
+            '^' ~ (eveng_lab_archive_labs_root | regex_escape) ~ '/?',
+            ''
+          )
+        | urlencode
+        | replace('+', '%20')
+        | replace('%2F', '/')
+        | replace('%2f', '/')
+      }}
+
+- name: Capture saved EVE-NG device configurations
+  block:
+    - name: Request EVE-NG native configuration export
+      ansible.builtin.uri:
+        url: >-
+          {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
+          }}/api/labs/{{ eveng_lab_archive_config_api_lab }}/nodes/export
+        method: PUT
+        headers:
+          Cookie: "{{ eveng_lab_archive_api_login.cookies_string }}"
+        return_content: true
+        status_code: 200
+        validate_certs: "{{ eveng_lab_archive_api_validate_certs }}"
+        use_proxy: false
+      register: eveng_lab_archive_config_export
+      no_log: true
+      failed_when: >-
+        eveng_lab_archive_config_export.status | default(0) != 200
+        or eveng_lab_archive_config_export.json.status | default('') != 'success'
+
+    - name: Record captured EVE-NG lab
+      ansible.builtin.set_fact:
+        eveng_lab_archive_captured_labs: >-
+          {{
+            eveng_lab_archive_captured_labs
+            + [eveng_lab_archive_config_relative_lab]
+          }}
+  rescue:
+    - name: Stop preservation after configuration capture failure
+      ansible.builtin.fail:
+        msg: >-
+          EVE-NG saved-configuration capture failed for
+          {{ eveng_lab_archive_config_relative_lab }}.
+          API status={{ eveng_lab_archive_config_export.status | default('unknown') }};
+          message={{
+            eveng_lab_archive_config_export.json.message
+            | default(eveng_lab_archive_config_export.msg)
+            | default('no response from EVE-NG')
+          }}

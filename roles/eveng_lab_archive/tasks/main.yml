@@ -34,9 +34,23 @@
       - eveng_lab_archive_folders is not string
       - eveng_lab_archive_include_node_state is boolean
       - eveng_lab_archive_restore_node_state is boolean
+      - eveng_lab_archive_capture_device_configs is boolean
+      - eveng_lab_archive_activate_saved_configs is boolean
+      - eveng_lab_archive_api_validate_certs is boolean
       - eveng_lab_archive_node_state_root is match('^/')
       - _eveng_lab_archive_node_state_path is match('^/')
+      - eveng_lab_archive_api_base_url is match('^https?://')
+      - eveng_lab_archive_api_username | string | trim | length > 0
+      - eveng_lab_archive_api_password_env | string | trim | length > 0
     fail_msg: "EVE-NG lab archive settings are invalid"
+
+- name: Restrict saved-configuration capture to export
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_action == 'export'
+    fail_msg: >-
+      eveng_lab_archive_capture_device_configs is valid only for export
+  when: eveng_lab_archive_capture_device_configs | bool
 
 - name: Require a complete lab export with node state
   ansible.builtin.assert:
@@ -70,6 +84,19 @@
     fail_msg: "EVE-NG lab archive folders must be safe relative paths"
   loop: "{{ eveng_lab_archive_folders }}"
 
+- name: Capture saved EVE-NG device configurations
+  ansible.builtin.include_tasks: capture-device-configs.yml
+  when:
+    - eveng_lab_archive_action == 'export'
+    - eveng_lab_archive_capture_device_configs | bool
+
+- name: Initialise saved-configuration result
+  ansible.builtin.set_fact:
+    eveng_lab_archive_device_config_results:
+      captured: false
+      labs: []
+  when: not eveng_lab_archive_capture_device_configs | bool
+
 - name: Export EVE-NG labs
   ansible.builtin.include_tasks: export.yml
   when: eveng_lab_archive_action == 'export'
@@ -83,6 +110,12 @@
 - name: Restore EVE-NG labs
   ansible.builtin.include_tasks: restore.yml
   when: eveng_lab_archive_action == 'restore'
+
+- name: Activate restored EVE-NG saved configurations
+  ansible.builtin.include_tasks: activate-restored-configs.yml
+  when:
+    - eveng_lab_archive_action == 'restore'
+    - eveng_lab_archive_activate_saved_configs | bool
 
 - name: Restore stopped EVE-NG node state
   ansible.builtin.include_tasks: restore-node-state.yml

@@ -57,8 +57,7 @@
       ansible.builtin.include_tasks: activate-restored-config.yml
       loop: "{{ eveng_lab_archive_restored_config_labs.files | map(attribute='path') | sort | list }}"
       loop_control:
-        loop_var: eveng_lab_archive_restored_lab
-        label: "{{ eveng_lab_archive_restored_lab }}"
+        label: "{{ item }}"
   always:
     - name: Close EVE-NG API restore session
       ansible.builtin.uri:

@@ -86,20 +86,46 @@
     esac
     {% endif %}
 
-    if [[ "$BASENAME" == *.tar.gz || "$EXT" == "tgz" || "$EXT" == "zip" || "$EXT" == "gz" ]]; then
-      if ! LIST_OUTPUT="$(tar -tzf "$ARCHIVE" 2>&1 | head -1)"; then
-        echo "invalid"
+    case "$BASENAME" in
+      *.tar.gz|*.tgz|*.gz)
+        GZIP_MAGIC="$(od -An -tx1 -N2 "$ARCHIVE" | tr -d ' \n')"
+        if [ "$GZIP_MAGIC" = "1f8b" ]; then
+          if ! LIST_OUTPUT="$(tar -tzf "$ARCHIVE" 2>/dev/null)"; then
+            echo "invalid:tar-archive"
+            exit 0
+          fi
+        elif ! LIST_OUTPUT="$(tar -tf - 2>/dev/null < "$ARCHIVE")"; then
+          echo "invalid:tar-archive"
+          exit 0
+        fi
+        ;;
+      *.zip)
+        if ! LIST_OUTPUT="$(unzip -Z1 "$ARCHIVE" 2>/dev/null)"; then
+          echo "invalid:zip-archive"
+          exit 0
+        fi
+        ;;
+      *)
+        echo "qemu"
         exit 0
-      fi
+        ;;
+    esac
 
-      FIRST_DIR="$(printf '%s\n' "$LIST_OUTPUT" | cut -d'/' -f1)"
+    if [ -z "$LIST_OUTPUT" ]; then
+      echo "invalid:empty-archive"
+      exit 0
+    fi
 
-      if [[ "$FIRST_DIR" == "iol" || "$FIRST_DIR" == "qemu" || "$FIRST_DIR" == "dynamips" ]]; then
-        echo "structured:$FIRST_DIR"
-        exit 0
-      fi
+    FIRST_ENTRY="${LIST_OUTPUT%%$'\n'*}"
+    FIRST_DIR="$(printf '%s\n' "$FIRST_ENTRY" | cut -d'/' -f1)"
 
-      echo "qemu"
+    if [[ "$FIRST_DIR" == "iol" || "$FIRST_DIR" == "qemu" || "$FIRST_DIR" == "dynamips" ]]; then
+      echo "structured:$FIRST_DIR"
+      exit 0
+    fi
+
+    if [[ "$BASENAME" == iol-* ]]; then
+      echo "iol"
       exit 0
     fi
 
@@ -242,6 +268,8 @@
 
 - name: Publish verified image installation state
   ansible.builtin.set_fact:
+    eveng_images_requested_count: >-
+      {{ eveng_images_detected_types.results | default([]) | length }}
     eveng_images_installed_count: "{{ eveng_images_installed_paths | default([]) | length }}"
     eveng_images_install_ready: true
   changed_when: false

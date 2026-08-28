@@ -14,6 +14,7 @@
   ansible.builtin.stat:
     path: "{{ eveng_images_local_path }}"
   delegate_to: localhost
+  become: false
   register: eveng_images_local_path_stat
   changed_when: false
 
@@ -21,6 +22,68 @@
   ansible.builtin.fail:
     msg: "Local path not found: {{ eveng_images_local_path }}"
   when: not (eveng_images_local_path_stat.stat.exists | default(false) | bool)
+
+- name: Find images in local directory
+  ansible.builtin.find:
+    paths: "{{ eveng_images_local_path }}"
+    patterns:
+      - "*.tar.gz"
+      - "*.tgz"
+      - "*.zip"
+      - "*.gz"
+      - "*.qcow2"
+      - "*.img"
+      - "*.bin"
+    recurse: true
+    file_type: file
+  delegate_to: localhost
+  become: false
+  register: eveng_images_local_files
+  changed_when: false
+  when: eveng_images_local_path_stat.stat.isdir | default(false) | bool
+
+- name: Initialise requested local images
+  ansible.builtin.set_fact:
+    eveng_images_local_requested_files: []
+  changed_when: false
+
+- name: Record requested local image file
+  ansible.builtin.set_fact:
+    eveng_images_local_requested_files: >-
+      {{
+        eveng_images_local_requested_files
+        + [{'relative_path': eveng_images_local_path | basename}]
+      }}
+  when: eveng_images_local_path_stat.stat.isreg | default(false) | bool
+  changed_when: false
+
+- name: Record requested local image directory entries
+  ansible.builtin.set_fact:
+    eveng_images_local_requested_files: >-
+      {{
+        eveng_images_local_requested_files
+        + [
+          {
+            'relative_path': item.path
+              | regex_replace(
+                  '^' ~ (eveng_images_local_path | regex_escape) ~ '/?',
+                  ''
+                )
+          }
+        ]
+      }}
+  loop: "{{ eveng_images_local_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path }}"
+  when: eveng_images_local_path_stat.stat.isdir | default(false) | bool
+  changed_when: false
+
+- name: Fail if local source contains no images
+  ansible.builtin.assert:
+    that:
+      - eveng_images_local_requested_files | length > 0
+    fail_msg: "No image files found in {{ eveng_images_local_path }}"
+  changed_when: false
 
 - name: Create cache directory
   ansible.builtin.file:
@@ -39,7 +102,9 @@
   ansible.posix.synchronize:
     src: "{{ eveng_images_local_path }}/"
     dest: "{{ eveng_images_cache_dir }}/"
+    use_ssh_args: true
     rsync_opts:
+      - "--include=*/"
       - "--include=*.tar.gz"
       - "--include=*.tgz"
       - "--include=*.zip"
@@ -50,29 +115,36 @@
       - "--exclude=*"
   when: eveng_images_local_path_stat.stat.isdir | default(false) | bool
 
-- name: Find copied images
-  ansible.builtin.find:
-    paths: "{{ eveng_images_cache_dir }}"
-    patterns:
-      - "*.tar.gz"
-      - "*.tgz"
-      - "*.zip"
-      - "*.gz"
-      - "*.qcow2"
-      - "*.img"
-      - "*.bin"
-    recurse: true
-  register: eveng_images_discovered_files
+- name: Inspect copied local images
+  ansible.builtin.stat:
+    path: "{{ eveng_images_cache_dir }}/{{ item.relative_path }}"
+  loop: "{{ eveng_images_local_requested_files }}"
+  loop_control:
+    label: "{{ item.relative_path }}"
+  register: eveng_images_local_cached_files
   changed_when: false
 
-- name: Fail if no images found
-  ansible.builtin.fail:
-    msg: "No image files found in {{ eveng_images_local_path }}"
-  when: (eveng_images_discovered_files.files | default([]) | length) == 0
+- name: Require every requested local image in the cache
+  ansible.builtin.assert:
+    that:
+      - item.stat.exists | default(false) | bool
+      - item.stat.isreg | default(false) | bool
+    fail_msg: >-
+      Local image was not copied to the target cache:
+      {{ item.item.relative_path }}
+  loop: "{{ eveng_images_local_cached_files.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.relative_path }}"
 
 - name: Record download metadata
   ansible.builtin.set_fact:
-    eveng_images_downloaded_files: "{{ eveng_images_discovered_files.files | default([]) }}"
+    eveng_images_downloaded_files: >-
+      {{
+        eveng_images_local_cached_files.results
+        | default([])
+        | map(attribute='stat')
+        | list
+      }}
     eveng_images_run_at: "{{ ansible_date_time.iso8601 }}"
   changed_when: false
 

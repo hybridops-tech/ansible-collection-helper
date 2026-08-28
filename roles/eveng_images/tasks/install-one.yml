@@ -47,14 +47,25 @@
         wrapped_layout=false
         case "$archive" in
           *.tar.gz|*.tgz|*.gz)
-            if tar -tzf "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+            gzip_magic="$(od -An -tx1 -N2 "$archive" | tr -d ' \n')"
+            if [ "$gzip_magic" = "1f8b" ]; then
+              archive_listing="$(tar -tzf "$archive")"
+            else
+              archive_listing="$(tar -tf - < "$archive")"
+            fi
+            if grep -Eq '(^/|(^|/)\.\.(/|$))' <<<"$archive_listing"; then
               printf 'Unsafe archive path detected: %s\n' "$archive" >&2
               exit 1
             fi
-            tar -xzf "$archive" -C "$work_dir"
+            if [ "$gzip_magic" = "1f8b" ]; then
+              tar -xzf "$archive" -C "$work_dir"
+            else
+              tar -xf - -C "$work_dir" < "$archive"
+            fi
             ;;
           *.zip)
-            if unzip -Z1 "$archive" | grep -Eq '(^/|(^|/)\.\.(/|$))'; then
+            archive_listing="$(unzip -Z1 "$archive")"
+            if grep -Eq '(^/|(^|/)\.\.(/|$))' <<<"$archive_listing"; then
               printf 'Unsafe archive path detected: %s\n' "$archive" >&2
               exit 1
             fi

@@ -20,16 +20,7 @@
     # unprivileged and overrides ownership only to exercise placement safely.
     eveng_images_iol_license_owner: "{{ lookup('env', 'USER') }}"
     eveng_images_iol_license_group: "{{ lookup('pipe', 'id -gn') }}"
-    eveng_images_list:
-      - name: linux-test.tar.gz
-        type: qemu
-        url: https://example.invalid/linux-test.tar.gz
-      - name: iol-test.tar.gz
-        type: iol
-        url: https://example.invalid/iol-test.tar.gz
-      - name: BIGIP-11.6.0.0.0.401.ALL.qcow2.zip
-        type: qemu
-        url: https://example.invalid/BIGIP-11.6.0.0.0.401.ALL.qcow2.zip
+    eveng_images_list: []
 
   tasks:
     - name: Reset test directory
@@ -70,7 +61,7 @@
       ansible.builtin.command:
         argv:
           - tar
-          - -czf
+          - -cf
           - "{{ eveng_images_cache_dir }}/linux-test.tar.gz"
           - -C
           - "{{ test_root }}/fixture"
@@ -168,6 +159,7 @@
           - eveng_images_test_bigip_system_disk.stat.isreg
           - eveng_images_test_bigip_datastore.stat.isreg
           - eveng_images_install_ready | bool
+          - eveng_images_requested_count | int == 3
           - eveng_images_installed_count | int == 3
 
     - name: Remove test directory

@@ -49,7 +49,7 @@
 
     - name: Resolve selected image names
       ansible.builtin.set_fact:
-        selected_image_names: >-
+        eveng_images_selected_image_names: >-
           {{
             eveng_images_downloaded_files
             | map(attribute='path')
@@ -61,7 +61,7 @@
     - name: Require only requested local images
       ansible.builtin.assert:
         that:
-          - selected_image_names == ['iol-requested.bin', 'requested-qemu.tar.gz']
+          - eveng_images_selected_image_names == ['iol-requested.bin', 'requested-qemu.tar.gz']
 
     - name: Remove test directory
       ansible.builtin.file:

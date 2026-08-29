@@ -85,6 +85,81 @@
     fail_msg: "No image files found in {{ eveng_images_local_path }}"
   changed_when: false
 
+- name: Detect GCP IAP local transfer
+  ansible.builtin.set_fact:
+    eveng_images_local_uses_gcp_iap: >-
+      {{
+        eveng_images_local_iap_acceleration | bool
+        and 'gcloud compute start-iap-tunnel'
+          in (ansible_ssh_common_args | default('') | string)
+      }}
+  changed_when: false
+
+- name: Resolve gcloud Python
+  ansible.builtin.command:
+    argv:
+      - gcloud
+      - info
+      - "--format=value(basic.python_location)"
+  delegate_to: localhost
+  become: false
+  register: eveng_images_local_gcloud_python
+  changed_when: false
+  when: eveng_images_local_uses_gcp_iap | bool
+
+- name: Validate gcloud Python
+  ansible.builtin.assert:
+    that:
+      - eveng_images_local_gcloud_python.stdout | default('') | trim | length > 0
+    fail_msg: "gcloud did not report its Python interpreter."
+  when: eveng_images_local_uses_gcp_iap | bool
+
+- name: Check gcloud NumPy acceleration
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_gcloud_python.stdout | trim }}"
+      - -c
+      - "import numpy"
+  environment:
+    CLOUDSDK_PYTHON_SITEPACKAGES: "1"
+  delegate_to: localhost
+  become: false
+  register: eveng_images_local_numpy_check
+  failed_when: false
+  changed_when: false
+  when: eveng_images_local_uses_gcp_iap | bool
+
+- name: Install gcloud NumPy acceleration
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_gcloud_python.stdout | trim }}"
+      - -m
+      - pip
+      - install
+      - --disable-pip-version-check
+      - --no-warn-script-location
+      - --user
+      - numpy
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when:
+    - eveng_images_local_uses_gcp_iap | bool
+    - eveng_images_local_numpy_check.rc | default(1) != 0
+
+- name: Verify gcloud NumPy acceleration
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_gcloud_python.stdout | trim }}"
+      - -c
+      - "import numpy"
+  environment:
+    CLOUDSDK_PYTHON_SITEPACKAGES: "1"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  when: eveng_images_local_uses_gcp_iap | bool
+
 - name: Create cache directory
   ansible.builtin.file:
     path: "{{ eveng_images_cache_dir }}"
@@ -116,6 +191,12 @@
       - "--include=*.img"
       - "--include=*.bin"
       - "--exclude=*"
+  environment: >-
+    {{
+      {'CLOUDSDK_PYTHON_SITEPACKAGES': '1'}
+      if eveng_images_local_uses_gcp_iap | bool
+      else {}
+    }}
   when: eveng_images_local_path_stat.stat.isdir | default(false) | bool
 
 - name: Inspect copied local images

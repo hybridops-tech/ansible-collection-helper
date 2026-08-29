@@ -129,17 +129,41 @@
   changed_when: false
   when: eveng_images_local_uses_gcp_iap | bool
 
-- name: Install gcloud NumPy acceleration
+- name: Identify gcloud Python environment
   ansible.builtin.command:
     argv:
       - "{{ eveng_images_local_gcloud_python.stdout | trim }}"
-      - -m
-      - pip
-      - install
-      - --disable-pip-version-check
-      - --no-warn-script-location
-      - --user
-      - numpy
+      - -c
+      - >-
+        import sys;
+        print('venv' if sys.prefix != sys.base_prefix else 'system')
+  delegate_to: localhost
+  become: false
+  register: eveng_images_local_gcloud_python_environment
+  changed_when: false
+  when:
+    - eveng_images_local_uses_gcp_iap | bool
+    - eveng_images_local_numpy_check.rc | default(1) != 0
+
+- name: Install gcloud NumPy acceleration
+  ansible.builtin.command:
+    argv: >-
+      {{
+        [
+          eveng_images_local_gcloud_python.stdout | trim,
+          '-m',
+          'pip',
+          'install',
+          '--disable-pip-version-check',
+          '--no-warn-script-location'
+        ]
+        + (
+          []
+          if eveng_images_local_gcloud_python_environment.stdout | trim == 'venv'
+          else ['--user']
+        )
+        + ['numpy']
+      }}
   delegate_to: localhost
   become: false
   changed_when: true

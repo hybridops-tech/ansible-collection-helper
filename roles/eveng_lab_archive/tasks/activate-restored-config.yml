@@ -78,7 +78,7 @@
     eveng_lab_archive_restored_config_activation.status | default(0) != 201
     or eveng_lab_archive_restored_config_activation.json.status | default('') != 'success'
 
-- name: Wipe stale EVE-NG runtime state before saved-configuration boot
+- name: Wipe restored EVE-NG node runtime before first boot
   ansible.builtin.uri:
     url: >-
       {{ eveng_lab_archive_api_base_url | regex_replace('/+$', '')
@@ -97,7 +97,6 @@
     or eveng_lab_archive_restored_config_wipe.json.status | default('') != 'success'
   when:
     - eveng_lab_archive_restored_config_nodes | length > 0
-    - not eveng_lab_archive_restore_node_state | bool
 
 - name: Record activated EVE-NG saved configurations
   ansible.builtin.set_fact:

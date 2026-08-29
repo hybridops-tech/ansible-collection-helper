@@ -293,6 +293,16 @@
             '<config id="1">' in
             (eveng_lab_archive_restored_lab_content.content | b64decode)
 
+    - name: Verify stale runtime state was cleared before node-state restore
+      ansible.builtin.stat:
+        path: "{{ test_root }}/student/routing lab.unl.wipe-observed"
+      register: eveng_lab_archive_node_state_restore_wipe
+
+    - name: Require mixed-state restore preparation
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_node_state_restore_wipe.stat.isreg
+
     - name: Verify restored test node state
       ansible.builtin.command:
         argv:
@@ -312,6 +322,79 @@
           - -q
           - "{{ test_node_state_root }}/0/test-lab/1/virtiob.qcow2"
       changed_when: false
+
+    - name: Require retained node-state generation metadata
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_results.node_state_included
+          - eveng_lab_archive_results.node_state_restored
+          - eveng_lab_archive_results.node_state_files == 2
+
+    - name: Replace restored QEMU test data
+      ansible.builtin.command:
+        argv:
+          - qemu-io
+          - -f
+          - qcow2
+          - -c
+          - write -P 0x00 0 512
+          - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
+      changed_when: true
+
+    - name: Repeat node-state restore with overwrite
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_lab_archive
+      vars:
+        eveng_lab_archive_action: restore
+        eveng_lab_archive_labs_root: "{{ test_root }}"
+        eveng_lab_archive_folders: [student]
+        eveng_lab_archive_path: "{{ test_archive }}"
+        eveng_lab_archive_expected_sha256: >-
+          {{ eveng_lab_archive_current_test_checksum }}
+        eveng_lab_archive_overwrite: true
+        eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_restore_node_state: true
+        eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
+        eveng_lab_archive_node_state_expected_sha256: >-
+          {{ eveng_lab_archive_test_node_state_checksum }}
+        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+        eveng_lab_archive_api_password_env: USER
+
+    - name: Verify repeated QEMU node-state restore
+      ansible.builtin.command:
+        argv:
+          - qemu-io
+          - -f
+          - qcow2
+          - -c
+          - read -P 0x5a 0 512
+          - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
+      changed_when: false
+
+    - name: Read repeatedly restored test lab
+      ansible.builtin.slurp:
+        path: "{{ test_root }}/student/routing lab.unl"
+      register: eveng_lab_archive_repeated_lab_content
+
+    - name: Inspect repeated mixed-state restore preparation
+      ansible.builtin.stat:
+        path: "{{ test_root }}/student/routing lab.unl.wipe-observed"
+      register: eveng_lab_archive_repeated_restore_wipe
+
+    - name: Require repeated mixed-state restore
+      ansible.builtin.assert:
+        that:
+          - >-
+            'config="1"' in
+            (eveng_lab_archive_repeated_lab_content.content | b64decode)
+          - >-
+            '<config id="1">' in
+            (eveng_lab_archive_repeated_lab_content.content | b64decode)
+          - eveng_lab_archive_repeated_restore_wipe.stat.isreg
+          - eveng_lab_archive_results.node_state_included
+          - eveng_lab_archive_results.node_state_restored
 
     - name: Remove restored lab before configuration-only restore
       ansible.builtin.file:

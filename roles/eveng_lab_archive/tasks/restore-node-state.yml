@@ -142,6 +142,7 @@
       {{
         eveng_lab_archive_results
         | combine({
+          'node_state_included': true,
           'node_state_restored': true,
           'node_state_archive_path': _eveng_lab_archive_node_state_path,
           'node_state_sha256':

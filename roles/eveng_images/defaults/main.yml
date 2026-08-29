@@ -14,6 +14,9 @@ eveng_images_cache_dir: /tmp/eveng_images_cache
 eveng_images_keep_cache: true
 eveng_images_addons_dir: /opt/unetlab/addons
 eveng_images_fixpermissions_command: /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
+eveng_images_install_manifest_path: /var/lib/hybridops/eveng-images/install-manifest.json
+eveng_images_install_manifest_owner: root
+eveng_images_install_manifest_group: root
 
 # Optional operator-supplied IOL licence material. The role never downloads or
 # generates this value. HybridOps.Core resolves it from the environment vault.

@@ -63,6 +63,17 @@
               - 1M
           changed_when: true
 
+        - name: Write test data to QEMU overlay
+          ansible.builtin.command:
+            argv:
+              - qemu-io
+              - -f
+              - qcow2
+              - -c
+              - write -P 0x5a 0 512
+              - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
+          changed_when: true
+
         - name: Create test secondary QEMU overlay
           ansible.builtin.command:
             argv:
@@ -273,9 +284,11 @@
     - name: Verify restored test node state
       ansible.builtin.command:
         argv:
-          - qemu-img
-          - check
-          - -q
+          - qemu-io
+          - -f
+          - qcow2
+          - -c
+          - read -P 0x5a 0 512
           - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
       changed_when: false
 

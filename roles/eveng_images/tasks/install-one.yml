@@ -200,3 +200,16 @@
         (eveng_images_installed_types | default([]))
         + [image_detection.stdout | trim | regex_replace('^(structured:|raw:)', '')]
       }}
+    eveng_images_manifest_updates: >-
+      {{
+        eveng_images_manifest_updates
+        | combine({
+          image_candidate.key: {
+            'sha256': image_candidate.sha256,
+            'size': image_candidate.size,
+            'mtime': image_candidate.mtime,
+            'type': image_detection.stdout | trim,
+            'installed_path': eveng_images_installed_image.stdout_lines | last
+          }
+        })
+      }}

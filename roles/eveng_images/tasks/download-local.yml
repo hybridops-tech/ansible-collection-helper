@@ -102,6 +102,9 @@
   ansible.posix.synchronize:
     src: "{{ eveng_images_local_path }}/"
     dest: "{{ eveng_images_cache_dir }}/"
+    compress: false
+    partial: true
+    rsync_timeout: "{{ eveng_images_local_sync_timeout | int }}"
     use_ssh_args: true
     rsync_opts:
       - "--include=*/"

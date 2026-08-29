@@ -483,5 +483,13 @@
     eveng_images_requested_count: >-
       {{ eveng_images_detected_types.results | default([]) | length }}
     eveng_images_installed_count: "{{ eveng_images_installed_paths | default([]) | length }}"
+    eveng_images_installed_names: >-
+      {{
+        eveng_images_install_candidates
+        | default([])
+        | map(attribute='key')
+        | map('basename')
+        | list
+      }}
     eveng_images_install_ready: true
   changed_when: false

@@ -240,6 +240,18 @@
         - "{{ test_root }}"
         - "{{ test_node_state_root }}"
 
+    - name: Recreate test lab root
+      ansible.builtin.file:
+        path: "{{ test_root }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create EVE-NG lab root marker
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/.updated"
+        content: ""
+        mode: "0644"
+
     - name: Restore test lab
       ansible.builtin.include_role:
         name: hybridops.helper.eveng_lab_archive

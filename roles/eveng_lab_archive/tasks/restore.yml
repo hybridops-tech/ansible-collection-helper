@@ -70,21 +70,39 @@
     group: "{{ eveng_lab_archive_group }}"
     mode: "0775"
 
-- name: Check labs root before restore
-  ansible.builtin.find:
-    paths: "{{ eveng_lab_archive_labs_root }}"
-    file_type: any
-    recurse: false
-  register: eveng_lab_archive_existing
+- name: Select archive payload files
+  ansible.builtin.set_fact:
+    eveng_lab_archive_payload_files: >-
+      {{
+        eveng_lab_archive_member_list.stdout_lines
+        | map('regex_replace', '^\./', '')
+        | reject('equalto', '')
+        | reject('equalto', '.')
+        | reject('equalto', '.updated')
+        | reject('match', '.+/$')
+        | list
+      }}
   when: not eveng_lab_archive_overwrite | bool
 
-- name: Protect existing lab content
+- name: Inspect existing archive payload paths
+  ansible.builtin.stat:
+    path: "{{ eveng_lab_archive_labs_root }}/{{ item }}"
+  loop: "{{ eveng_lab_archive_payload_files | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  register: eveng_lab_archive_existing_payload
+  when: not eveng_lab_archive_overwrite | bool
+
+- name: Protect existing archive payload files
   ansible.builtin.assert:
     that:
-      - eveng_lab_archive_existing.matched | default(0) == 0
+      - not item.stat.exists
     fail_msg: >-
-      EVE-NG lab content already exists. Set eveng_lab_archive_overwrite=true
-      only when replacing it is intended.
+      EVE-NG lab content already exists at {{ item.item }}. Set
+      eveng_lab_archive_overwrite=true only when replacing it is intended.
+  loop: "{{ eveng_lab_archive_existing_payload.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
   when: not eveng_lab_archive_overwrite | bool
 
 - name: Remove existing lab content for explicit replacement

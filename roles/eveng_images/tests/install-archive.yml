@@ -164,6 +164,12 @@
           - eveng_images_install_ready | bool
           - eveng_images_requested_count | int == 3
           - eveng_images_installed_count | int == 3
+          - eveng_images_installed_names | length == 3
+          - "'linux-test.tar.gz' in eveng_images_installed_names"
+          - "'iol-test.tar.gz' in eveng_images_installed_names"
+          - >-
+            'BIGIP-11.6.0.0.0.401.ALL.qcow2.zip'
+            in eveng_images_installed_names
 
     - name: Change installed disk after first installation
       ansible.builtin.copy:
@@ -245,6 +251,8 @@
           - eveng_images_pending_installations | length == 1
           - eveng_images_requested_count | int == 4
           - eveng_images_installed_count | int == 4
+          - eveng_images_installed_names | length == 4
+          - "'linux-new.tar.gz' in eveng_images_installed_names"
 
     - name: Remove test directory
       ansible.builtin.file:

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.10] - 2026-08-26
+## [0.1.10] - 2026-08-29
 
 ### Added
 
@@ -18,6 +18,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Retained source-bound image downloads by default so interrupted image runs
   can resume without repeating completed transfers.
+- Skipped unchanged local image archives and bounded local synchronization.
+- Prepared controller-side acceleration for GCP IAP image transfers when the
+  required Python support is available.
 
 ### Fixed
 
@@ -28,6 +31,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Stopped MEGA downloads promptly when the transfer quota is exhausted.
 - Avoided loop-variable collisions when a play restores EVE-NG lab state more
   than once.
+- Reported every installed EVE-NG image and restored lab archives without
+  replacing unrelated existing lab content.
+- Preserved saved device configurations and QEMU node state together across
+  repeated archive and restore cycles.
+- Restored EVE-NG tenant ownership and runtime permissions so mixed IOL and
+  QEMU labs can start after restoration.
 
 ## [0.1.9] - 2026-08-22
 

@@ -13,6 +13,9 @@ eveng_images_install: true
 eveng_images_cache_dir: /tmp/eveng_images_cache
 eveng_images_keep_cache: true
 eveng_images_local_iap_acceleration: true
+eveng_images_local_gcloud_command: gcloud
+eveng_images_local_iap_python_dir: >-
+  {{ lookup('ansible.builtin.env', 'HOME') }}/.hybridops/state/gcloud-iap-python
 eveng_images_local_sync_timeout: 300
 eveng_images_addons_dir: /opt/unetlab/addons
 eveng_images_fixpermissions_command: /opt/unetlab/wrappers/unl_wrapper -a fixpermissions

@@ -95,93 +95,8 @@
       }}
   changed_when: false
 
-- name: Resolve gcloud Python
-  ansible.builtin.command:
-    argv:
-      - gcloud
-      - info
-      - "--format=value(basic.python_location)"
-  delegate_to: localhost
-  become: false
-  register: eveng_images_local_gcloud_python
-  changed_when: false
-  when: eveng_images_local_uses_gcp_iap | bool
-
-- name: Validate gcloud Python
-  ansible.builtin.assert:
-    that:
-      - eveng_images_local_gcloud_python.stdout | default('') | trim | length > 0
-    fail_msg: "gcloud did not report its Python interpreter."
-  when: eveng_images_local_uses_gcp_iap | bool
-
-- name: Check gcloud NumPy acceleration
-  ansible.builtin.command:
-    argv:
-      - "{{ eveng_images_local_gcloud_python.stdout | trim }}"
-      - -c
-      - "import numpy"
-  environment:
-    CLOUDSDK_PYTHON_SITEPACKAGES: "1"
-  delegate_to: localhost
-  become: false
-  register: eveng_images_local_numpy_check
-  failed_when: false
-  changed_when: false
-  when: eveng_images_local_uses_gcp_iap | bool
-
-- name: Identify gcloud Python environment
-  ansible.builtin.command:
-    argv:
-      - "{{ eveng_images_local_gcloud_python.stdout | trim }}"
-      - -c
-      - >-
-        import sys;
-        print('venv' if sys.prefix != sys.base_prefix else 'system')
-  delegate_to: localhost
-  become: false
-  register: eveng_images_local_gcloud_python_environment
-  changed_when: false
-  when:
-    - eveng_images_local_uses_gcp_iap | bool
-    - eveng_images_local_numpy_check.rc | default(1) != 0
-
-- name: Install gcloud NumPy acceleration
-  ansible.builtin.command:
-    argv: >-
-      {{
-        [
-          eveng_images_local_gcloud_python.stdout | trim,
-          '-m',
-          'pip',
-          'install',
-          '--disable-pip-version-check',
-          '--no-warn-script-location'
-        ]
-        + (
-          []
-          if eveng_images_local_gcloud_python_environment.stdout | trim == 'venv'
-          else ['--user']
-        )
-        + ['numpy']
-      }}
-  delegate_to: localhost
-  become: false
-  changed_when: true
-  when:
-    - eveng_images_local_uses_gcp_iap | bool
-    - eveng_images_local_numpy_check.rc | default(1) != 0
-
-- name: Verify gcloud NumPy acceleration
-  ansible.builtin.command:
-    argv:
-      - "{{ eveng_images_local_gcloud_python.stdout | trim }}"
-      - -c
-      - "import numpy"
-  environment:
-    CLOUDSDK_PYTHON_SITEPACKAGES: "1"
-  delegate_to: localhost
-  become: false
-  changed_when: false
+- name: Prepare GCP IAP transfer acceleration
+  ansible.builtin.include_tasks: prepare-iap-acceleration.yml
   when: eveng_images_local_uses_gcp_iap | bool
 
 - name: Create cache directory
@@ -217,7 +132,10 @@
       - "--exclude=*"
   environment: >-
     {{
-      {'CLOUDSDK_PYTHON_SITEPACKAGES': '1'}
+      {
+        'CLOUDSDK_PYTHON': eveng_images_local_iap_python,
+        'CLOUDSDK_PYTHON_SITEPACKAGES': '1'
+      }
       if eveng_images_local_uses_gcp_iap | bool
       else {}
     }}

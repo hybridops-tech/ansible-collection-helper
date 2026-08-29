@@ -1,0 +1,105 @@
+---
+# purpose: Prepare the controller Python used by gcloud IAP transfers
+# maintainer: HybridOps.Tech
+
+- name: Resolve gcloud Python
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_gcloud_command }}"
+      - info
+      - "--format=value(basic.python_location)"
+  delegate_to: localhost
+  become: false
+  register: eveng_images_local_gcloud_python_result
+  changed_when: false
+
+- name: Validate gcloud Python
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_images_local_gcloud_python_result.stdout
+        | default('')
+        | trim
+        | length > 0
+    fail_msg: "gcloud did not report its Python interpreter."
+
+- name: Identify gcloud Python environment
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_gcloud_python_result.stdout | trim }}"
+      - -c
+      - >-
+        import sys;
+        print('venv' if sys.prefix != sys.base_prefix else 'system')
+  delegate_to: localhost
+  become: false
+  register: eveng_images_local_gcloud_python_environment
+  changed_when: false
+
+- name: Create managed IAP Python parent directory
+  ansible.builtin.file:
+    path: "{{ eveng_images_local_iap_python_dir | dirname }}"
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  become: false
+  when: eveng_images_local_gcloud_python_environment.stdout | trim == 'system'
+
+- name: Create managed IAP Python environment
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_gcloud_python_result.stdout | trim }}"
+      - -m
+      - venv
+      - "{{ eveng_images_local_iap_python_dir }}"
+    creates: "{{ eveng_images_local_iap_python_dir }}/bin/python"
+  delegate_to: localhost
+  become: false
+  when: eveng_images_local_gcloud_python_environment.stdout | trim == 'system'
+
+- name: Select IAP Python
+  ansible.builtin.set_fact:
+    eveng_images_local_iap_python: >-
+      {{
+        eveng_images_local_gcloud_python_result.stdout | trim
+        if eveng_images_local_gcloud_python_environment.stdout | trim == 'venv'
+        else eveng_images_local_iap_python_dir ~ '/bin/python'
+      }}
+  changed_when: false
+
+- name: Check IAP transfer acceleration
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_iap_python }}"
+      - -c
+      - "import numpy"
+  delegate_to: localhost
+  become: false
+  register: eveng_images_local_numpy_check
+  failed_when: false
+  changed_when: false
+
+- name: Install IAP transfer acceleration
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_iap_python }}"
+      - -m
+      - pip
+      - install
+      - --disable-pip-version-check
+      - --no-warn-script-location
+      - numpy
+  delegate_to: localhost
+  become: false
+  changed_when: true
+  when: eveng_images_local_numpy_check.rc != 0
+
+- name: Verify IAP transfer acceleration
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_images_local_iap_python }}"
+      - -c
+      - "import numpy"
+  delegate_to: localhost
+  become: false
+  changed_when: false

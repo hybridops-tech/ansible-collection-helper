@@ -18,6 +18,8 @@ eveng_lab_archive_stop_running_nodes: false
 eveng_lab_archive_node_state_root: /opt/unetlab/tmp
 eveng_lab_archive_node_state_path: ""
 eveng_lab_archive_node_state_expected_sha256: ""
+eveng_lab_archive_tenant_uid_base: 32768
+eveng_lab_archive_tenant_gid: "32768"
 eveng_lab_archive_qemu_img: /opt/qemu/bin/qemu-img
 eveng_lab_archive_capture_device_configs: false
 eveng_lab_archive_activate_saved_configs: true

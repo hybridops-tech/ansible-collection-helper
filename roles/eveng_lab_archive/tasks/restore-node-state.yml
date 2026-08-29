@@ -76,6 +76,41 @@
         | length == 0
     fail_msg: "EVE-NG node-state archive contains an unsafe member"
 
+- name: Require EVE-NG node-state member layout
+  ansible.builtin.assert:
+    that:
+      - item is match('^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+    fail_msg: "EVE-NG node-state archive member has an invalid path: {{ item }}"
+  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop_control:
+    label: "{{ item }}"
+
+- name: Initialise restored EVE-NG tenant paths
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_tenants: []
+    eveng_lab_archive_node_state_lab_roots: []
+
+- name: Resolve restored EVE-NG tenant paths
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_tenants: >-
+      {{
+        (eveng_lab_archive_node_state_tenants + [item.split('/')[0]])
+        | unique
+        | sort
+      }}
+    eveng_lab_archive_node_state_lab_roots: >-
+      {{
+        (
+          eveng_lab_archive_node_state_lab_roots
+          + [item.split('/')[0] ~ '/' ~ item.split('/')[1]]
+        )
+        | unique
+        | sort
+      }}
+  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop_control:
+    label: "{{ item }}"
+
 - name: Inspect existing node-state paths
   ansible.builtin.stat:
     path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
@@ -110,6 +145,36 @@
     owner: "{{ eveng_lab_archive_owner }}"
     group: "{{ eveng_lab_archive_group }}"
     remote_src: false
+
+- name: Restore EVE-NG tenant root ownership
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
+    state: directory
+    owner: >-
+      {{
+        (eveng_lab_archive_tenant_uid_base | int)
+        + (item | int)
+      }}
+    group: "{{ eveng_lab_archive_tenant_gid }}"
+    mode: "2775"
+  loop: "{{ eveng_lab_archive_node_state_tenants }}"
+  loop_control:
+    label: "tenant {{ item }}"
+
+- name: Restore EVE-NG lab runtime ownership
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
+    state: directory
+    owner: >-
+      {{
+        (eveng_lab_archive_tenant_uid_base | int)
+        + (item.split('/')[0] | int)
+      }}
+    group: "{{ eveng_lab_archive_tenant_gid }}"
+    recurse: true
+  loop: "{{ eveng_lab_archive_node_state_lab_roots }}"
+  loop_control:
+    label: "{{ item }}"
 
 - name: Select available qemu-img command
   ansible.builtin.shell: |

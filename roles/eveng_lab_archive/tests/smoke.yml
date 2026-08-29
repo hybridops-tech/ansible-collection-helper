@@ -8,6 +8,8 @@
     test_node_state_root: /tmp/hyops-eveng-lab-node-state-test
     test_archive: /tmp/hyops-eveng-lab-archive-test-output/labs.tar.gz
     test_api_port: 18765
+    eveng_lab_archive_tenant_uid_base: "{{ lookup('pipe', 'id -u') | int }}"
+    eveng_lab_archive_tenant_gid: "{{ lookup('pipe', 'id -g') }}"
   tasks:
     - name: Clear previous test data
       ansible.builtin.file:
@@ -302,6 +304,31 @@
       ansible.builtin.assert:
         that:
           - eveng_lab_archive_node_state_restore_wipe.stat.isreg
+
+    - name: Inspect restored tenant runtime ownership
+      ansible.builtin.stat:
+        path: "{{ item }}"
+      loop:
+        - "{{ test_node_state_root }}/0"
+        - "{{ test_node_state_root }}/0/test-lab"
+      register: eveng_lab_archive_restored_runtime_paths
+
+    - name: Require writable restored tenant runtime
+      ansible.builtin.assert:
+        that:
+          - >-
+            eveng_lab_archive_restored_runtime_paths.results[0].stat.uid
+            == lookup('pipe', 'id -u') | int
+          - >-
+            eveng_lab_archive_restored_runtime_paths.results[0].stat.gid
+            == lookup('pipe', 'id -g') | int
+          - eveng_lab_archive_restored_runtime_paths.results[0].stat.mode == '2775'
+          - >-
+            eveng_lab_archive_restored_runtime_paths.results[1].stat.uid
+            == lookup('pipe', 'id -u') | int
+          - >-
+            eveng_lab_archive_restored_runtime_paths.results[1].stat.gid
+            == lookup('pipe', 'id -g') | int
 
     - name: Verify restored test node state
       ansible.builtin.command:

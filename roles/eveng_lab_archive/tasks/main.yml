@@ -48,6 +48,8 @@
       - eveng_lab_archive_api_validate_certs is boolean
       - eveng_lab_archive_node_state_root is match('^/')
       - _eveng_lab_archive_node_state_path is match('^/')
+      - eveng_lab_archive_tenant_uid_base | int >= 0
+      - eveng_lab_archive_tenant_gid | string is match('^[0-9]+$')
       - eveng_lab_archive_api_base_url is match('^https?://')
       - eveng_lab_archive_api_username | string | trim | length > 0
       - eveng_lab_archive_api_password_env | string | trim | length > 0

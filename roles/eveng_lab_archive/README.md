@@ -74,11 +74,14 @@ An existing-lab migration can supply a separately verified image companion:
 eveng_lab_archive_restore_images: true
 eveng_lab_archive_images_path: /srv/hybridops/labs/images.tar.gz
 eveng_lab_archive_images_expected_sha256: CHANGE_ME
+eveng_lab_archive_overwrite_images: false
 ```
 
 The companion may contain referenced QEMU, IOL and Dynamips bases. Licence
 material is not accepted. Existing image paths remain protected unless
-overwrite is enabled explicitly.
+image overwrite is enabled explicitly. Image content is staged before an
+atomic promotion. A failed promotion or permission step restores the previous
+paths.
 
 Restore verifies that the target filesystems can hold the compressed archives,
 their expanded contents, and the free-space reserve before replacing lab data.

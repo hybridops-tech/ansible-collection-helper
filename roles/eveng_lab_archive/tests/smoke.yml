@@ -307,7 +307,7 @@
       ansible.builtin.command:
         argv:
           - tar
-          - -czf
+          - -cJf
           - "{{ test_image_archive }}"
           - -C
           - "{{ test_image_source }}"
@@ -428,12 +428,66 @@
         that:
           - eveng_lab_archive_restored_lab.stat.isreg
           - eveng_lab_archive_restored_image.stat.isreg
+          - eveng_lab_archive_results.images_included
+          - eveng_lab_archive_results.images_restored
           - >-
             'config="1"' in
             (eveng_lab_archive_restored_lab_content.content | b64decode)
           - >-
             '<config id="1">' in
             (eveng_lab_archive_restored_lab_content.content | b64decode)
+
+    - name: Write existing EVE-NG image content for rollback test
+      ansible.builtin.copy:
+        dest: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+        content: existing-base
+        mode: "0644"
+
+    - name: Verify transactional EVE-NG image rollback
+      block:
+        - name: Attempt image replacement with a failing permission step
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: restore
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_folders: [student]
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_expected_sha256: >-
+              {{ eveng_lab_archive_current_test_checksum }}
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_restore_images: true
+            eveng_lab_archive_overwrite_images: true
+            eveng_lab_archive_images_root: "{{ test_image_root }}"
+            eveng_lab_archive_images_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_images_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_images_path: "{{ test_image_archive }}"
+            eveng_lab_archive_images_expected_sha256: >-
+              {{ eveng_lab_archive_test_image_stat.stat.checksum }}
+            eveng_lab_archive_fixpermissions_command: /bin/false
+            eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+            eveng_lab_archive_api_password_env: USER
+        - name: Reject unexpected image replacement success
+          ansible.builtin.fail:
+            msg: "EVE-NG image replacement unexpectedly succeeded"
+      rescue:
+        - name: Record expected EVE-NG image replacement failure
+          ansible.builtin.set_fact:
+            eveng_lab_archive_image_rollback_observed: true
+
+    - name: Read EVE-NG image after rollback
+      ansible.builtin.slurp:
+        path: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+      register: eveng_lab_archive_image_after_rollback
+
+    - name: Require transactional EVE-NG image rollback
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_image_rollback_observed | default(false)
+          - >-
+            eveng_lab_archive_image_after_rollback.content | b64decode
+            == 'existing-base'
 
     - name: Verify stale runtime state was cleared before node-state restore
       ansible.builtin.stat:

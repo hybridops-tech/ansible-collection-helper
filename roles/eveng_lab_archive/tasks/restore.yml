@@ -24,7 +24,7 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tzf
+      - -tf
       - "{{ _eveng_lab_archive_path }}"
   delegate_to: localhost
   become: false
@@ -35,7 +35,7 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tvzf
+      - -tvf
       - "{{ _eveng_lab_archive_path }}"
   delegate_to: localhost
   become: false

@@ -21,7 +21,7 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tzf
+      - -tf
       - "{{ _eveng_lab_archive_images_path }}"
   delegate_to: localhost
   become: false
@@ -32,7 +32,7 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tvzf
+      - -tvf
       - "{{ _eveng_lab_archive_images_path }}"
   delegate_to: localhost
   become: false
@@ -58,6 +58,11 @@
       - >-
         eveng_lab_archive_image_member_types.stdout_lines
         | select('match', '^[lh]')
+        | list
+        | length == 0
+      - >-
+        eveng_lab_archive_image_members.stdout_lines
+        | select('match', '(?i)^iol/bin/iourc(?:\.txt)?$')
         | list
         | length == 0
     fail_msg: "EVE-NG image archive contains an unsafe member"
@@ -152,44 +157,75 @@
       {{ eveng_lab_archive_images_available_bytes }} bytes on the filesystem
       containing {{ eveng_lab_archive_images_root }}.
 
-- name: Inspect existing referenced EVE-NG images
-  ansible.builtin.stat:
-    path: "{{ eveng_lab_archive_images_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_image_paths | default([]) }}"
-  loop_control:
-    label: "{{ item }}"
-  register: eveng_lab_archive_existing_images
-  when: not eveng_lab_archive_overwrite | bool
-
-- name: Protect existing referenced EVE-NG images
-  ansible.builtin.assert:
-    that:
-      - not item.stat.exists
-    fail_msg: >-
-      EVE-NG image content already exists at {{ item.item }}. Enable overwrite
-      only when replacing it is intended.
-  loop: "{{ eveng_lab_archive_existing_images.results | default([]) }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: not eveng_lab_archive_overwrite | bool
-
-- name: Remove referenced EVE-NG images for explicit replacement
-  ansible.builtin.file:
-    path: "{{ eveng_lab_archive_images_root }}/{{ item }}"
-    state: absent
-  loop: "{{ eveng_lab_archive_image_paths | default([]) }}"
-  loop_control:
-    label: "{{ item }}"
-  when: eveng_lab_archive_overwrite | bool
+- name: Create EVE-NG image restore transaction directory
+  ansible.builtin.tempfile:
+    state: directory
+    path: "{{ eveng_lab_archive_images_root | dirname }}"
+    prefix: .hyops-eveng-images-
+  register: eveng_lab_archive_images_transaction
 
 - name: Restore referenced EVE-NG images
-  ansible.builtin.unarchive:
-    src: "{{ _eveng_lab_archive_images_path }}"
-    dest: "{{ eveng_lab_archive_images_root }}"
-    owner: "{{ eveng_lab_archive_images_owner }}"
-    group: "{{ eveng_lab_archive_images_group }}"
-    remote_src: false
+  block:
+    - name: Create EVE-NG image transaction payload directory
+      ansible.builtin.file:
+        path: "{{ eveng_lab_archive_images_transaction.path }}/payload"
+        state: directory
+        mode: "0700"
 
-- name: Apply EVE-NG image permissions
-  ansible.builtin.command: "{{ eveng_lab_archive_fixpermissions_command }}"
-  changed_when: true
+    - name: Stage referenced EVE-NG images
+      ansible.builtin.unarchive:
+        src: "{{ _eveng_lab_archive_images_path }}"
+        dest: "{{ eveng_lab_archive_images_transaction.path }}/payload"
+        owner: "{{ eveng_lab_archive_images_owner }}"
+        group: "{{ eveng_lab_archive_images_group }}"
+        remote_src: false
+
+    - name: Install EVE-NG image transaction helper
+      ansible.builtin.copy:
+        src: restore_images_transaction.py
+        dest: "{{ eveng_lab_archive_images_transaction.path }}/restore_images_transaction.py"
+        mode: "0700"
+
+    - name: Apply EVE-NG image transaction
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ eveng_lab_archive_images_transaction.path }}/restore_images_transaction.py"
+          - apply
+          - "{{ eveng_lab_archive_images_transaction.path }}"
+          - "{{ eveng_lab_archive_images_root }}"
+          - "{{ eveng_lab_archive_image_paths | to_json }}"
+          - "{{ eveng_lab_archive_overwrite_images | bool | lower }}"
+      changed_when: true
+
+    - name: Apply EVE-NG image permissions
+      ansible.builtin.command: "{{ eveng_lab_archive_fixpermissions_command }}"
+      changed_when: true
+  rescue:
+    - name: Roll back EVE-NG image transaction
+      ansible.builtin.command:
+        argv:
+          - /usr/bin/python3
+          - "{{ eveng_lab_archive_images_transaction.path }}/restore_images_transaction.py"
+          - rollback
+          - "{{ eveng_lab_archive_images_transaction.path }}"
+          - "{{ eveng_lab_archive_images_root }}"
+          - "{{ eveng_lab_archive_image_paths | to_json }}"
+          - "{{ eveng_lab_archive_overwrite_images | bool | lower }}"
+      changed_when: true
+      failed_when: false
+
+    - name: Report EVE-NG image restore failure
+      ansible.builtin.fail:
+        msg: >-
+          EVE-NG image restore failed:
+          {{
+            ansible_failed_result.stderr
+            | default(ansible_failed_result.msg, true)
+            | trim
+          }}
+  always:
+    - name: Remove EVE-NG image restore transaction directory
+      ansible.builtin.file:
+        path: "{{ eveng_lab_archive_images_transaction.path }}"
+        state: absent

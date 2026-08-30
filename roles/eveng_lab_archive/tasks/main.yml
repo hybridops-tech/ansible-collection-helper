@@ -45,6 +45,7 @@
       - eveng_lab_archive_include_node_state is boolean
       - eveng_lab_archive_restore_node_state is boolean
       - eveng_lab_archive_restore_images is boolean
+      - eveng_lab_archive_overwrite_images is boolean
       - eveng_lab_archive_restore_free_reserve_bytes | int >= 0
       - eveng_lab_archive_capture_device_configs is boolean
       - eveng_lab_archive_activate_saved_configs is boolean
@@ -164,3 +165,20 @@
   when:
     - eveng_lab_archive_action == 'restore'
     - eveng_lab_archive_restore_node_state | bool
+
+- name: Publish EVE-NG image restore result
+  ansible.builtin.set_fact:
+    eveng_lab_archive_results: >-
+      {{
+        eveng_lab_archive_results
+        | combine({
+          'images_included': true,
+          'images_restored': true,
+          'images_archive_path': _eveng_lab_archive_images_path,
+          'images_sha256':
+            eveng_lab_archive_images_controller_stat.stat.checksum
+        })
+      }}
+  when:
+    - eveng_lab_archive_action == 'restore'
+    - eveng_lab_archive_restore_images | bool

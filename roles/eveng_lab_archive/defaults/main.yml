@@ -9,6 +9,7 @@ eveng_lab_archive_path: ""
 eveng_lab_archive_resolved_path: ""
 eveng_lab_archive_expected_sha256: ""
 eveng_lab_archive_overwrite: false
+eveng_lab_archive_overwrite_images: false
 eveng_lab_archive_remote_dir: /tmp/hyops-eveng-lab-archive
 eveng_lab_archive_owner: www-data
 eveng_lab_archive_group: www-data

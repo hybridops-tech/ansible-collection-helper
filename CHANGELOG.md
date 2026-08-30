@@ -14,6 +14,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added checksum-verified restoration of referenced EVE-NG base-image
   companions before lab definitions and QEMU overlays.
 
+### Changed
+
+- Separated base-image replacement from lab-definition overwrite and promoted
+  staged image paths as a rollback-capable transaction.
+
+### Fixed
+
+- Rejected IOL licence material in migration image companions and accepted the
+  archive formats supported by controller inspection.
+
 ## [0.1.10] - 2026-08-29
 
 ### Added

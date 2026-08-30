@@ -1,0 +1,195 @@
+---
+- name: Inspect controller EVE-NG image archive
+  ansible.builtin.stat:
+    path: "{{ _eveng_lab_archive_images_path }}"
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  register: eveng_lab_archive_images_controller_stat
+
+- name: Verify controller EVE-NG image archive
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_images_controller_stat.stat.isreg | default(false)
+      - >-
+        eveng_lab_archive_images_controller_stat.stat.checksum | lower
+        == eveng_lab_archive_images_expected_sha256 | lower
+    fail_msg: >-
+      EVE-NG image archive is missing or its SHA-256 checksum does not match
+
+- name: List controller EVE-NG image archive members
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -tzf
+      - "{{ _eveng_lab_archive_images_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_image_members
+
+- name: Inspect controller EVE-NG image archive member types
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -tvzf
+      - "{{ _eveng_lab_archive_images_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_image_member_types
+
+- name: Reject unsafe EVE-NG image archive members
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_image_members.stdout_lines
+        | reject('match', '(^/|(^|/)\.\.(/|$))')
+        | list
+        | length == eveng_lab_archive_image_members.stdout_lines | length
+      - >-
+        eveng_lab_archive_image_members.stdout_lines
+        | reject(
+            'match',
+            '^(qemu(?:/|$)|dynamips(?:/|$)|iol/?$|iol/bin(?:/|$))'
+          )
+        | list
+        | length == 0
+      - >-
+        eveng_lab_archive_image_member_types.stdout_lines
+        | select('match', '^[lh]')
+        | list
+        | length == 0
+    fail_msg: "EVE-NG image archive contains an unsafe member"
+
+- name: Measure expanded EVE-NG image archive
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - >-
+        import sys,tarfile; archive=tarfile.open(sys.argv[1], 'r:*');
+        print(sum(member.size for member in archive if member.isfile()));
+        archive.close()
+      - "{{ _eveng_lab_archive_images_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_images_expanded_size
+
+- name: Initialise referenced EVE-NG image paths
+  ansible.builtin.set_fact:
+    eveng_lab_archive_image_paths: []
+
+- name: Select referenced EVE-NG image paths
+  ansible.builtin.set_fact:
+    eveng_lab_archive_image_paths: >-
+      {{
+        (
+          eveng_lab_archive_image_paths | default([])
+          + [
+              (
+                item.split('/')[0:2] | join('/')
+                if item is match('^qemu/[^/]+(?:/|$)')
+                else item | regex_replace('/$', '')
+              )
+            ]
+        )
+        | reject('equalto', '')
+        | unique
+        | sort
+      }}
+  loop: "{{ eveng_lab_archive_image_members.stdout_lines }}"
+  loop_control:
+    label: "{{ item }}"
+  when:
+    - item is not match('^(qemu|iol|iol/bin|dynamips)/?$')
+
+- name: Ensure EVE-NG image root exists
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_images_root }}"
+    state: directory
+    owner: "{{ eveng_lab_archive_images_owner }}"
+    group: "{{ eveng_lab_archive_images_group }}"
+    mode: "0755"
+
+- name: Read EVE-NG image filesystem capacity
+  ansible.builtin.command:
+    argv:
+      - df
+      - -Pk
+      - "{{ eveng_lab_archive_images_root }}"
+  environment:
+    LC_ALL: C
+  changed_when: false
+  register: eveng_lab_archive_images_disk_capacity
+
+- name: Resolve EVE-NG image restore capacity
+  ansible.builtin.set_fact:
+    eveng_lab_archive_images_available_bytes: >-
+      {{
+        (
+          eveng_lab_archive_images_disk_capacity.stdout_lines[-1].split()[3]
+          | int
+        ) * 1024
+      }}
+    eveng_lab_archive_images_required_bytes: >-
+      {{
+        (eveng_lab_archive_images_controller_stat.stat.size | int)
+        + (eveng_lab_archive_images_expanded_size.stdout | int)
+        + (eveng_lab_archive_restore_free_reserve_bytes | int)
+      }}
+
+- name: Require EVE-NG image restore capacity
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_images_available_bytes | int
+        >= eveng_lab_archive_images_required_bytes | int
+    fail_msg: >-
+      Insufficient disk space to restore EVE-NG images: required
+      {{ eveng_lab_archive_images_required_bytes }} bytes, available
+      {{ eveng_lab_archive_images_available_bytes }} bytes on the filesystem
+      containing {{ eveng_lab_archive_images_root }}.
+
+- name: Inspect existing referenced EVE-NG images
+  ansible.builtin.stat:
+    path: "{{ eveng_lab_archive_images_root }}/{{ item }}"
+  loop: "{{ eveng_lab_archive_image_paths | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  register: eveng_lab_archive_existing_images
+  when: not eveng_lab_archive_overwrite | bool
+
+- name: Protect existing referenced EVE-NG images
+  ansible.builtin.assert:
+    that:
+      - not item.stat.exists
+    fail_msg: >-
+      EVE-NG image content already exists at {{ item.item }}. Enable overwrite
+      only when replacing it is intended.
+  loop: "{{ eveng_lab_archive_existing_images.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: not eveng_lab_archive_overwrite | bool
+
+- name: Remove referenced EVE-NG images for explicit replacement
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_images_root }}/{{ item }}"
+    state: absent
+  loop: "{{ eveng_lab_archive_image_paths | default([]) }}"
+  loop_control:
+    label: "{{ item }}"
+  when: eveng_lab_archive_overwrite | bool
+
+- name: Restore referenced EVE-NG images
+  ansible.builtin.unarchive:
+    src: "{{ _eveng_lab_archive_images_path }}"
+    dest: "{{ eveng_lab_archive_images_root }}"
+    owner: "{{ eveng_lab_archive_images_owner }}"
+    group: "{{ eveng_lab_archive_images_group }}"
+    remote_src: false
+
+- name: Apply EVE-NG image permissions
+  ansible.builtin.command: "{{ eveng_lab_archive_fixpermissions_command }}"
+  changed_when: true

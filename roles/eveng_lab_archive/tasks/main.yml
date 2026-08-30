@@ -23,6 +23,7 @@
           ~ '.node-state.tar.gz'
         )
       }}
+    _eveng_lab_archive_images_path: "{{ eveng_lab_archive_images_path }}"
 
 - name: Resolve EVE-NG archive generation paths
   ansible.builtin.set_fact:
@@ -43,12 +44,20 @@
       - eveng_lab_archive_folders is not string
       - eveng_lab_archive_include_node_state is boolean
       - eveng_lab_archive_restore_node_state is boolean
+      - eveng_lab_archive_restore_images is boolean
       - eveng_lab_archive_restore_free_reserve_bytes | int >= 0
       - eveng_lab_archive_capture_device_configs is boolean
       - eveng_lab_archive_activate_saved_configs is boolean
       - eveng_lab_archive_api_validate_certs is boolean
       - eveng_lab_archive_node_state_root is match('^/')
       - _eveng_lab_archive_node_state_path is match('^/')
+      - eveng_lab_archive_images_root is match('^/')
+      - eveng_lab_archive_images_owner | string | trim | length > 0
+      - eveng_lab_archive_images_group | string | trim | length > 0
+      - eveng_lab_archive_fixpermissions_command | string | trim | length > 0
+      - >-
+        not eveng_lab_archive_restore_images
+        or _eveng_lab_archive_images_path is match('^/')
       - eveng_lab_archive_tenant_uid_base | int >= 0
       - eveng_lab_archive_tenant_gid | string is match('^[0-9]+$')
       - eveng_lab_archive_api_base_url is match('^https?://')
@@ -86,6 +95,17 @@
     - eveng_lab_archive_action == 'restore'
     - eveng_lab_archive_restore_node_state | bool
 
+- name: Validate image restore checksum
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_images_expected_sha256 is match('^[0-9a-fA-F]{64}$')
+    fail_msg: >-
+      eveng_lab_archive_images_expected_sha256 must contain 64 hexadecimal
+      characters
+  when:
+    - eveng_lab_archive_action == 'restore'
+    - eveng_lab_archive_restore_images | bool
+
 - name: Validate selected EVE-NG lab folders
   ansible.builtin.assert:
     that:
@@ -122,6 +142,12 @@
 - name: Promote verified EVE-NG archive
   ansible.builtin.include_tasks: promote.yml
   when: eveng_lab_archive_action == 'export'
+
+- name: Restore referenced EVE-NG base images
+  ansible.builtin.include_tasks: restore-images.yml
+  when:
+    - eveng_lab_archive_action == 'restore'
+    - eveng_lab_archive_restore_images | bool
 
 - name: Restore EVE-NG labs
   ansible.builtin.include_tasks: restore.yml

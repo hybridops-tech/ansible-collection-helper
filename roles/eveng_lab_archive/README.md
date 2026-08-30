@@ -1,7 +1,7 @@
 # eveng_lab_archive
 
 Export EVE-NG lab definitions to a controller-side archive and restore them
-after redeployment. Device images are not included.
+after redeployment. Routine exports do not include device images.
 
 ## Export
 
@@ -67,6 +67,18 @@ eveng_lab_archive_node_state_expected_sha256: CHANGE_ME
 
 The matching base images must already be installed. Existing runtime disks are
 not replaced unless overwrite is enabled explicitly.
+
+An existing-lab migration can supply a separately verified image companion:
+
+```yaml
+eveng_lab_archive_restore_images: true
+eveng_lab_archive_images_path: /srv/hybridops/labs/images.tar.gz
+eveng_lab_archive_images_expected_sha256: CHANGE_ME
+```
+
+The companion may contain referenced QEMU, IOL and Dynamips bases. Licence
+material is not accepted. Existing image paths remain protected unless
+overwrite is enabled explicitly.
 
 Restore verifies that the target filesystems can hold the compressed archives,
 their expanded contents, and the free-space reserve before replacing lab data.

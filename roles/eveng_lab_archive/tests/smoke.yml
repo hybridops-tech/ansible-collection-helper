@@ -7,6 +7,9 @@
     test_root: /tmp/hyops-eveng-lab-archive-test
     test_node_state_root: /tmp/hyops-eveng-lab-node-state-test
     test_archive: /tmp/hyops-eveng-lab-archive-test-output/labs.tar.gz
+    test_image_source: /tmp/hyops-eveng-image-source
+    test_image_root: /tmp/hyops-eveng-image-target
+    test_image_archive: /tmp/hyops-eveng-image-archive/images.tar.gz
     test_api_port: 18765
     eveng_lab_archive_tenant_uid_base: "{{ lookup('pipe', 'id -u') | int }}"
     eveng_lab_archive_tenant_gid: "{{ lookup('pipe', 'id -g') }}"
@@ -19,6 +22,9 @@
         - "{{ test_root }}"
         - "{{ test_node_state_root }}"
         - "{{ test_archive | dirname }}"
+        - "{{ test_image_source }}"
+        - "{{ test_image_root }}"
+        - "{{ test_image_archive | dirname }}"
 
     - name: Prepare test lab
       block:
@@ -279,6 +285,89 @@
         - "{{ test_root }}"
         - "{{ test_node_state_root }}"
 
+    - name: Prepare referenced EVE-NG image fixture
+      ansible.builtin.file:
+        path: "{{ test_image_source }}/qemu/test-image"
+        state: directory
+        mode: "0755"
+
+    - name: Write referenced EVE-NG image fixture
+      ansible.builtin.copy:
+        dest: "{{ test_image_source }}/qemu/test-image/virtioa.qcow2"
+        content: "portable base image\n"
+        mode: "0644"
+
+    - name: Create controller EVE-NG image archive directory
+      ansible.builtin.file:
+        path: "{{ test_image_archive | dirname }}"
+        state: directory
+        mode: "0700"
+
+    - name: Create referenced EVE-NG image archive
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -czf
+          - "{{ test_image_archive }}"
+          - -C
+          - "{{ test_image_source }}"
+          - qemu
+      changed_when: true
+
+    - name: Inspect referenced EVE-NG image archive
+      ansible.builtin.stat:
+        path: "{{ test_image_archive }}"
+        checksum_algorithm: sha256
+      register: eveng_lab_archive_test_image_stat
+
+    - name: Verify fail-closed EVE-NG image capacity check
+      block:
+        - name: Attempt image restore without sufficient capacity
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: restore
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_expected_sha256: >-
+              {{ eveng_lab_archive_current_test_checksum }}
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_restore_images: true
+            eveng_lab_archive_images_root: "{{ test_image_root }}"
+            eveng_lab_archive_images_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_images_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_images_path: "{{ test_image_archive }}"
+            eveng_lab_archive_images_expected_sha256: >-
+              {{ eveng_lab_archive_test_image_stat.stat.checksum }}
+            eveng_lab_archive_restore_free_reserve_bytes: 9223372036854775807
+            eveng_lab_archive_fixpermissions_command: /bin/true
+            eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+            eveng_lab_archive_api_password_env: USER
+        - name: Reject unexpected EVE-NG image capacity success
+          ansible.builtin.fail:
+            msg: "EVE-NG image restore unexpectedly passed its capacity gate"
+      rescue:
+        - name: Record expected EVE-NG image capacity failure
+          ansible.builtin.set_fact:
+            eveng_lab_archive_image_capacity_failure_observed: true
+            eveng_lab_archive_image_capacity_failure_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Inspect image target after capacity failure
+      ansible.builtin.stat:
+        path: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+      register: eveng_lab_archive_after_image_capacity_failure
+
+    - name: Require fail-closed EVE-NG image capacity check
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_image_capacity_failure_observed | default(false)
+          - >-
+            'Insufficient disk space to restore EVE-NG images'
+            in eveng_lab_archive_image_capacity_failure_message
+          - not eveng_lab_archive_after_image_capacity_failure.stat.exists
+
     - name: Recreate test lab root
       ansible.builtin.file:
         path: "{{ test_root }}"
@@ -304,6 +393,14 @@
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_restore_node_state: true
+        eveng_lab_archive_restore_images: true
+        eveng_lab_archive_images_root: "{{ test_image_root }}"
+        eveng_lab_archive_images_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_images_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_images_path: "{{ test_image_archive }}"
+        eveng_lab_archive_images_expected_sha256: >-
+          {{ eveng_lab_archive_test_image_stat.stat.checksum }}
+        eveng_lab_archive_fixpermissions_command: /bin/true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_node_state_expected_sha256: >-
           {{ eveng_lab_archive_test_node_state_checksum }}
@@ -316,6 +413,11 @@
         path: "{{ test_root }}/student/routing lab.unl"
       register: eveng_lab_archive_restored_lab
 
+    - name: Verify restored referenced EVE-NG image
+      ansible.builtin.stat:
+        path: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+      register: eveng_lab_archive_restored_image
+
     - name: Read restored test lab
       ansible.builtin.slurp:
         path: "{{ test_root }}/student/routing lab.unl"
@@ -325,6 +427,7 @@
       ansible.builtin.assert:
         that:
           - eveng_lab_archive_restored_lab.stat.isreg
+          - eveng_lab_archive_restored_image.stat.isreg
           - >-
             'config="1"' in
             (eveng_lab_archive_restored_lab_content.content | b64decode)
@@ -509,3 +612,6 @@
         - "{{ test_root }}"
         - "{{ test_node_state_root }}"
         - "{{ test_archive | dirname }}"
+        - "{{ test_image_source }}"
+        - "{{ test_image_root }}"
+        - "{{ test_image_archive | dirname }}"

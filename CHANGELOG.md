@@ -11,6 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Added a fail-closed EVE-NG restore capacity check before existing lab and
   node-state data is replaced.
+- Added checksum-verified restoration of referenced EVE-NG base-image
+  companions before lab definitions and QEMU overlays.
 
 ## [0.1.10] - 2026-08-29
 

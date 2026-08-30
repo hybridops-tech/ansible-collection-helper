@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a fail-closed EVE-NG restore capacity check before existing lab and
+  node-state data is replaced.
+
 ## [0.1.10] - 2026-08-29
 
 ### Added

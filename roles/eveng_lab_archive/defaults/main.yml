@@ -14,6 +14,7 @@ eveng_lab_archive_owner: www-data
 eveng_lab_archive_group: www-data
 eveng_lab_archive_include_node_state: false
 eveng_lab_archive_restore_node_state: false
+eveng_lab_archive_restore_free_reserve_bytes: 67108864
 eveng_lab_archive_stop_running_nodes: false
 eveng_lab_archive_node_state_root: /opt/unetlab/tmp
 eveng_lab_archive_node_state_path: ""

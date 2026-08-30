@@ -67,3 +67,6 @@ eveng_lab_archive_node_state_expected_sha256: CHANGE_ME
 
 The matching base images must already be installed. Existing runtime disks are
 not replaced unless overwrite is enabled explicitly.
+
+Restore verifies that the target filesystems can hold the compressed archives,
+their expanded contents, and the free-space reserve before replacing lab data.

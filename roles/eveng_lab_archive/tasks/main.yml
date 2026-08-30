@@ -43,6 +43,7 @@
       - eveng_lab_archive_folders is not string
       - eveng_lab_archive_include_node_state is boolean
       - eveng_lab_archive_restore_node_state is boolean
+      - eveng_lab_archive_restore_free_reserve_bytes | int >= 0
       - eveng_lab_archive_capture_device_configs is boolean
       - eveng_lab_archive_activate_saved_configs is boolean
       - eveng_lab_archive_api_validate_certs is boolean

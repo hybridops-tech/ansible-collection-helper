@@ -85,6 +85,21 @@
   loop_control:
     label: "{{ item }}"
 
+- name: Measure expanded EVE-NG node-state archive
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - >-
+        import sys,tarfile; archive=tarfile.open(sys.argv[1], 'r:*');
+        print(sum(member.size for member in archive if member.isfile()));
+        archive.close()
+      - "{{ _eveng_lab_archive_node_state_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_node_state_expanded_size
+
 - name: Initialise restored EVE-NG tenant paths
   ansible.builtin.set_fact:
     eveng_lab_archive_node_state_tenants: []
@@ -137,6 +152,45 @@
     owner: "{{ eveng_lab_archive_owner }}"
     group: "{{ eveng_lab_archive_group }}"
     mode: "0755"
+
+- name: Read EVE-NG node-state filesystem capacity
+  ansible.builtin.command:
+    argv:
+      - df
+      - -Pk
+      - "{{ eveng_lab_archive_node_state_root }}"
+  environment:
+    LC_ALL: C
+  changed_when: false
+  register: eveng_lab_archive_node_state_disk_capacity
+
+- name: Resolve EVE-NG node-state restore capacity
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_available_bytes: >-
+      {{
+        (
+          eveng_lab_archive_node_state_disk_capacity.stdout_lines[-1].split()[3]
+          | int
+        ) * 1024
+      }}
+    eveng_lab_archive_node_state_required_bytes: >-
+      {{
+        (eveng_lab_archive_node_state_controller_stat.stat.size | int)
+        + (eveng_lab_archive_node_state_expanded_size.stdout | int)
+        + (eveng_lab_archive_restore_free_reserve_bytes | int)
+      }}
+
+- name: Require EVE-NG node-state restore capacity
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_node_state_available_bytes | int
+        >= eveng_lab_archive_node_state_required_bytes | int
+    fail_msg: >-
+      Insufficient disk space to restore EVE-NG node state: required
+      {{ eveng_lab_archive_node_state_required_bytes }} bytes, available
+      {{ eveng_lab_archive_node_state_available_bytes }} bytes on the filesystem
+      containing {{ eveng_lab_archive_node_state_root }}.
 
 - name: Restore EVE-NG node state
   ansible.builtin.unarchive:

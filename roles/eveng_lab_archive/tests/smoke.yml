@@ -234,6 +234,43 @@
             eveng_lab_archive_retained_archive.stat.checksum
             == eveng_lab_archive_current_test_checksum
 
+    - name: Reject EVE-NG restore without sufficient disk space
+      block:
+        - name: Attempt EVE-NG restore above available capacity
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: restore
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_expected_sha256: >-
+              {{ eveng_lab_archive_current_test_checksum }}
+            eveng_lab_archive_overwrite: true
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_restore_free_reserve_bytes: 9000000000000000000
+            eveng_lab_archive_activate_saved_configs: false
+      rescue:
+        - name: Record expected EVE-NG capacity failure
+          ansible.builtin.set_fact:
+            eveng_lab_archive_capacity_failure_observed: true
+            eveng_lab_archive_capacity_failure_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Inspect EVE-NG lab after capacity rejection
+      ansible.builtin.stat:
+        path: "{{ test_root }}/student/routing lab.unl"
+      register: eveng_lab_archive_after_capacity_failure
+
+    - name: Require fail-closed EVE-NG capacity check
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_capacity_failure_observed | default(false)
+          - >-
+            'Insufficient disk space to restore EVE-NG labs'
+            in eveng_lab_archive_capacity_failure_message
+          - eveng_lab_archive_after_capacity_failure.stat.isreg | default(false)
+
     - name: Remove test lab before restore
       ansible.builtin.file:
         path: "{{ item }}"

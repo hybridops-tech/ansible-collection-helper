@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Required the EVE-NG health check to verify first-boot completion, Tomcat and
+  the IPv4 Guacamole daemon endpoint.
+
 ## [0.1.10] - 2026-08-29
 
 ### Added

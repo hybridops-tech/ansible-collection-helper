@@ -40,42 +40,13 @@
   changed_when: false
   register: eveng_lab_archive_running_qemu
 
-- name: Stop running EVE-NG QEMU nodes
-  ansible.builtin.shell: |
-    set -eu
-    pattern='[/]opt/qemu[^ ]*/bin/qemu-system-'
-    pkill -TERM -f "${pattern}" || true
-    attempt=0
-    while pgrep -f "${pattern}" >/dev/null; do
-      attempt=$((attempt + 1))
-      if [ "${attempt}" -ge 30 ]; then
-        printf '%s\n' "EVE-NG nodes did not stop within 30 seconds." >&2
-        exit 1
-      fi
-      sleep 1
-    done
-  args:
-    executable: /bin/bash
-  changed_when: true
-  when:
-    - eveng_lab_archive_stop_running_nodes | bool
-    - eveng_lab_archive_running_qemu.stdout | trim | length > 0
-
-- name: Recheck EVE-NG QEMU nodes
-  ansible.builtin.shell: |
-    set -o pipefail
-    pgrep -af '[/]opt/qemu[^ ]*/bin/qemu-system-' || true
-  args:
-    executable: /bin/bash
-  changed_when: false
-  register: eveng_lab_archive_running_qemu_after_stop
-
 - name: Require stopped QEMU nodes
   ansible.builtin.assert:
     that:
-      - eveng_lab_archive_running_qemu_after_stop.stdout | trim | length == 0
+      - eveng_lab_archive_running_qemu.stdout | trim | length == 0
     fail_msg: >-
-      QEMU nodes are running. Stop the lab nodes before capturing node state.
+      QEMU nodes are running. Shut down stateful guests inside the guest, stop
+      the remaining EVE-NG nodes, and retry the export.
 
 - name: Find EVE-NG QEMU overlays
   ansible.builtin.find:

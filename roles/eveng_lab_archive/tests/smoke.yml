@@ -112,6 +112,28 @@
               - 1M
           changed_when: true
 
+    - name: Attempt automatic QEMU termination
+      block:
+        - name: Run unsafe EVE-NG node-state export
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: export
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_folders: []
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_include_node_state: true
+            eveng_lab_archive_stop_running_nodes: true
+      rescue:
+        - name: Record automatic QEMU termination rejection
+          ansible.builtin.set_fact:
+            eveng_lab_archive_automatic_stop_rejected: true
+
+    - name: Require automatic QEMU termination rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_automatic_stop_rejected | default(false)
+
     - name: Export test lab
       ansible.builtin.include_role:
         name: hybridops.helper.eveng_lab_archive

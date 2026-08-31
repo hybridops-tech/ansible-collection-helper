@@ -118,6 +118,23 @@
     group: "{{ eveng_lab_archive_images_group }}"
     mode: "0755"
 
+- name: Find interrupted EVE-NG image restore transactions
+  ansible.builtin.find:
+    paths: "{{ eveng_lab_archive_images_root | dirname }}"
+    patterns: ".hyops-eveng-images-*"
+    file_type: directory
+    hidden: true
+    recurse: false
+  register: eveng_lab_archive_stale_image_transactions
+
+- name: Remove interrupted EVE-NG image restore transactions
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: absent
+  loop: "{{ eveng_lab_archive_stale_image_transactions.files }}"
+  loop_control:
+    label: "{{ item.path }}"
+
 - name: Read EVE-NG image filesystem capacity
   ansible.builtin.command:
     argv:

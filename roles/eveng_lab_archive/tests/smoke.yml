@@ -10,6 +10,7 @@
     test_image_source: /tmp/hyops-eveng-image-source
     test_image_root: /tmp/hyops-eveng-image-target
     test_image_archive: /tmp/hyops-eveng-image-archive/images.tar.gz
+    test_stale_image_transaction: /tmp/.hyops-eveng-images-stale-test
     test_qemu_img_wrapper: /tmp/hyops-eveng-qemu-img
     test_qemu_img_repair_marker: /tmp/hyops-eveng-qemu-img-repaired
     test_api_port: 18765
@@ -27,6 +28,7 @@
         - "{{ test_image_source }}"
         - "{{ test_image_root }}"
         - "{{ test_image_archive | dirname }}"
+        - "{{ test_stale_image_transaction }}"
         - "{{ test_qemu_img_wrapper }}"
         - "{{ test_qemu_img_repair_marker }}"
 
@@ -428,6 +430,12 @@
         state: directory
         mode: "0755"
 
+    - name: Create interrupted EVE-NG image transaction fixture
+      ansible.builtin.file:
+        path: "{{ test_stale_image_transaction }}/payload"
+        state: directory
+        mode: "0700"
+
     - name: Create EVE-NG lab root marker
       ansible.builtin.copy:
         dest: "{{ test_root }}/.updated"
@@ -472,6 +480,11 @@
         path: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
       register: eveng_lab_archive_restored_image
 
+    - name: Inspect interrupted EVE-NG image transaction fixture
+      ansible.builtin.stat:
+        path: "{{ test_stale_image_transaction }}"
+      register: eveng_lab_archive_stale_transaction_after_restore
+
     - name: Read restored test lab
       ansible.builtin.slurp:
         path: "{{ test_root }}/student/routing lab.unl"
@@ -482,6 +495,7 @@
         that:
           - eveng_lab_archive_restored_lab.stat.isreg
           - eveng_lab_archive_restored_image.stat.isreg
+          - not eveng_lab_archive_stale_transaction_after_restore.stat.exists
           - eveng_lab_archive_results.images_included
           - eveng_lab_archive_results.images_restored
           - >-

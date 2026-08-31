@@ -27,6 +27,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   archive formats supported by controller inspection.
 - Repaired QCOW2 leaked-cluster metadata in restored node-state copies before
   final integrity validation.
+- Removed interrupted HybridOps image-staging transactions before starting a
+  new EVE-NG image restore.
 
 ## [0.1.10] - 2026-08-29
 

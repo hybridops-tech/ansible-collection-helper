@@ -59,6 +59,10 @@ writes a checksummed companion archive without copying its vendor base image.
 Multi-disk nodes retain each writable overlay. Export succeeds only after both
 fetched archives have been read and their expected contents verified.
 
+`eveng_lab_archive_guest_quiesced` is evidence for the current export. Do not
+persist it as a standing environment acknowledgement. The legacy
+`eveng_lab_archive_stop_running_nodes` input is accepted but has no effect.
+
 Restore requires the companion archive checksum:
 
 ```yaml

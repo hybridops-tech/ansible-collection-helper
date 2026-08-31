@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Accepted leak-only QEMU overlay checks during EVE-NG restore while retaining
+  hard failures for incomplete checks and corrupt images.
+
 ## [0.1.10] - 2026-08-29
 
 ### Added

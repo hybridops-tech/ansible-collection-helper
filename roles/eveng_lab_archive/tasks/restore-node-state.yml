@@ -199,7 +199,9 @@
   loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
   loop_control:
     label: "{{ item }}"
+  register: eveng_lab_archive_overlay_check
   changed_when: false
+  failed_when: eveng_lab_archive_overlay_check.rc not in [0, 3]
 
 - name: Publish EVE-NG node-state restore result
   ansible.builtin.set_fact:
@@ -213,6 +215,11 @@
           'node_state_sha256':
             eveng_lab_archive_node_state_controller_stat.stat.checksum,
           'node_state_files':
-            eveng_lab_archive_node_state_members.stdout_lines | length
+            eveng_lab_archive_node_state_members.stdout_lines | length,
+          'node_state_leak_files':
+            eveng_lab_archive_overlay_check.results
+            | selectattr('rc', 'equalto', 3)
+            | map(attribute='item')
+            | list
         })
       }}

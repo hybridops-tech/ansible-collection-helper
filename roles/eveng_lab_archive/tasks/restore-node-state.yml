@@ -243,6 +243,35 @@
   changed_when: false
   register: eveng_lab_archive_qemu_img_command
 
+- name: Inspect restored EVE-NG QEMU overlays
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_lab_archive_qemu_img_command.stdout | trim }}"
+      - check
+      - -q
+      - "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
+  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop_control:
+    label: "{{ item }}"
+  changed_when: false
+  failed_when: eveng_lab_archive_overlay_check.rc not in [0, 3]
+  register: eveng_lab_archive_overlay_check
+
+- name: Repair leaked clusters in restored EVE-NG QEMU overlays
+  ansible.builtin.command:
+    argv:
+      - "{{ eveng_lab_archive_qemu_img_command.stdout | trim }}"
+      - check
+      - -q
+      - -r
+      - leaks
+      - "{{ eveng_lab_archive_node_state_root }}/{{ item.item }}"
+  loop: "{{ eveng_lab_archive_overlay_check.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.rc == 3
+  changed_when: true
+
 - name: Validate restored EVE-NG QEMU overlays
   ansible.builtin.command:
     argv:

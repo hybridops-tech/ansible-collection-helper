@@ -25,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Rejected IOL licence material in migration image companions and accepted the
   archive formats supported by controller inspection.
+- Repaired QCOW2 leaked-cluster metadata in restored node-state copies before
+  final integrity validation.
 
 ## [0.1.10] - 2026-08-29
 

@@ -72,7 +72,8 @@ eveng_lab_archive_node_state_expected_sha256: CHANGE_ME
 ```
 
 The matching base images must already be installed. Existing runtime disks are
-not replaced unless overwrite is enabled explicitly.
+not replaced unless overwrite is enabled explicitly. Restore repairs QCOW2
+cluster leaks in the restored copy and rejects structural corruption.
 
 An existing-lab migration can supply a separately verified image companion:
 

@@ -10,6 +10,8 @@
     test_image_source: /tmp/hyops-eveng-image-source
     test_image_root: /tmp/hyops-eveng-image-target
     test_image_archive: /tmp/hyops-eveng-image-archive/images.tar.gz
+    test_qemu_img_wrapper: /tmp/hyops-eveng-qemu-img
+    test_qemu_img_repair_marker: /tmp/hyops-eveng-qemu-img-repaired
     test_api_port: 18765
     eveng_lab_archive_tenant_uid_base: "{{ lookup('pipe', 'id -u') | int }}"
     eveng_lab_archive_tenant_gid: "{{ lookup('pipe', 'id -g') }}"
@@ -25,6 +27,8 @@
         - "{{ test_image_source }}"
         - "{{ test_image_root }}"
         - "{{ test_image_archive | dirname }}"
+        - "{{ test_qemu_img_wrapper }}"
+        - "{{ test_qemu_img_repair_marker }}"
 
     - name: Prepare test lab
       block:
@@ -92,6 +96,32 @@
               - "{{ test_node_state_root }}/0/test-lab/1/virtiob.qcow2"
               - 1M
           changed_when: true
+
+        - name: Write QEMU overlay repair test wrapper
+          ansible.builtin.copy:
+            dest: "{{ test_qemu_img_wrapper }}"
+            mode: "0755"
+            content: |
+              #!/bin/sh
+              last=""
+              for arg in "$@"; do
+                last="$arg"
+              done
+              case "$*" in
+                *" -r leaks "*)
+                  if [ "${last##*/}" = "virtiob.qcow2" ]; then
+                    touch {{ test_qemu_img_repair_marker | quote }}
+                  fi
+                  ;;
+                *)
+                  if [ "${last##*/}" = "virtiob.qcow2" ] &&
+                     [ ! -e {{ test_qemu_img_repair_marker | quote }} ]; then
+                    echo "Leaked cluster 1 refcount=1 reference=0" >&2
+                    exit 3
+                  fi
+                  ;;
+              esac
+              exec /usr/bin/qemu-img "$@"
 
         - name: Create nested managed image directory
           ansible.builtin.file:
@@ -428,7 +458,7 @@
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_node_state_expected_sha256: >-
           {{ eveng_lab_archive_test_node_state_checksum }}
-        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_qemu_img: "{{ test_qemu_img_wrapper }}"
         eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
         eveng_lab_archive_api_password_env: USER
 
@@ -558,6 +588,16 @@
           - read -P 0x5a 0 512
           - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
       changed_when: false
+
+    - name: Require leaked-cluster repair during restore
+      ansible.builtin.stat:
+        path: "{{ test_qemu_img_repair_marker }}"
+      register: eveng_lab_archive_qemu_img_repair
+
+    - name: Require repaired restored overlay
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_qemu_img_repair.stat.isreg
 
     - name: Verify restored secondary node state
       ansible.builtin.command:

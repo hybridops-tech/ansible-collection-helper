@@ -112,9 +112,9 @@
               - 1M
           changed_when: true
 
-    - name: Attempt automatic QEMU termination
+    - name: Attempt unquiesced node-state export
       block:
-        - name: Run unsafe EVE-NG node-state export
+        - name: Run unquiesced EVE-NG node-state export
           ansible.builtin.include_role:
             name: hybridops.helper.eveng_lab_archive
           vars:
@@ -123,16 +123,15 @@
             eveng_lab_archive_folders: []
             eveng_lab_archive_path: "{{ test_archive }}"
             eveng_lab_archive_include_node_state: true
-            eveng_lab_archive_stop_running_nodes: true
       rescue:
-        - name: Record automatic QEMU termination rejection
+        - name: Record unquiesced node-state rejection
           ansible.builtin.set_fact:
-            eveng_lab_archive_automatic_stop_rejected: true
+            eveng_lab_archive_unquiesced_rejected: true
 
-    - name: Require automatic QEMU termination rejection
+    - name: Require unquiesced node-state rejection
       ansible.builtin.assert:
         that:
-          - eveng_lab_archive_automatic_stop_rejected | default(false)
+          - eveng_lab_archive_unquiesced_rejected | default(false)
 
     - name: Export test lab
       ansible.builtin.include_role:
@@ -146,6 +145,8 @@
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_guest_quiesced: true
+        eveng_lab_archive_stop_running_nodes: true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
         eveng_lab_archive_capture_device_configs: true
@@ -183,6 +184,7 @@
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_guest_quiesced: true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
         eveng_lab_archive_capture_device_configs: true

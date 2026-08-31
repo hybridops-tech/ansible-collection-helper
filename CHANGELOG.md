@@ -18,8 +18,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Separated base-image replacement from lab-definition overwrite and promoted
   staged image paths as a rollback-capable transaction.
-- Rejected automatic QEMU termination during node-state export. Stateful guests
-  must be shut down inside the guest before their EVE-NG nodes are stopped.
+- Made the legacy automatic-QEMU-stop setting inert during node-state export.
+  Stateful guests must be quiesced before their EVE-NG nodes are stopped.
 
 ### Fixed
 

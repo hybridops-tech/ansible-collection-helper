@@ -45,6 +45,7 @@
       - eveng_lab_archive_include_node_state is boolean
       - eveng_lab_archive_restore_node_state is boolean
       - eveng_lab_archive_stop_running_nodes is boolean
+      - eveng_lab_archive_guest_quiesced is boolean
       - eveng_lab_archive_restore_images is boolean
       - eveng_lab_archive_overwrite_images is boolean
       - eveng_lab_archive_restore_free_reserve_bytes | int >= 0
@@ -67,13 +68,17 @@
       - eveng_lab_archive_api_password_env | string | trim | length > 0
     fail_msg: "EVE-NG lab archive settings are invalid"
 
-- name: Reject automatic EVE-NG node termination
+- name: Require guest-quiesced EVE-NG node state
   ansible.builtin.assert:
     that:
-      - not eveng_lab_archive_stop_running_nodes | bool
+      - eveng_lab_archive_guest_quiesced | bool
     fail_msg: >-
-      Automatic node termination is not supported. Shut down stateful guests
-      inside the guest, stop the remaining EVE-NG nodes, and retry the export.
+      EVE-NG node-state export requires guest quiescence. Shut down stateful
+      guests inside their operating systems, stop the remaining nodes, and
+      retry the export.
+  when:
+    - eveng_lab_archive_action == 'export'
+    - eveng_lab_archive_include_node_state | bool
 
 - name: Restrict saved-configuration capture to export
   ansible.builtin.assert:

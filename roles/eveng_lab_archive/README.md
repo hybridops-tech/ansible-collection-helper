@@ -50,6 +50,7 @@ QEMU overlay capture is optional and requires a complete lab export:
 
 ```yaml
 eveng_lab_archive_include_node_state: true
+eveng_lab_archive_guest_quiesced: true
 ```
 
 Shut down stateful guests inside their operating systems, then stop the EVE-NG

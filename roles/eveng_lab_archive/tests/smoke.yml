@@ -105,7 +105,7 @@
               - 1M
           changed_when: true
 
-        - name: Write QEMU overlay repair test wrapper
+        - name: Write QEMU overlay preservation test wrapper
           ansible.builtin.copy:
             dest: "{{ test_qemu_img_wrapper }}"
             mode: "0755"
@@ -117,13 +117,11 @@
               done
               case "$*" in
                 *" -r leaks "*)
-                  if [ "${last##*/}" = "virtiob.qcow2" ]; then
-                    touch {{ test_qemu_img_repair_marker | quote }}
-                  fi
+                  touch {{ test_qemu_img_repair_marker | quote }}
+                  exit 91
                   ;;
                 *)
-                  if [ "${last##*/}" = "virtiob.qcow2" ] &&
-                     [ ! -e {{ test_qemu_img_repair_marker | quote }} ]; then
+                  if [ "${last##*/}" = "virtiob.qcow2" ]; then
                     echo "Leaked cluster 1 refcount=1 reference=0" >&2
                     exit 3
                   fi
@@ -609,15 +607,18 @@
           - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
       changed_when: false
 
-    - name: Require leaked-cluster repair during restore
+    - name: Inspect leaked-cluster mutation marker
       ansible.builtin.stat:
         path: "{{ test_qemu_img_repair_marker }}"
       register: eveng_lab_archive_qemu_img_repair
 
-    - name: Require repaired restored overlay
+    - name: Require byte-preserving leaked-cluster handling
       ansible.builtin.assert:
         that:
-          - eveng_lab_archive_qemu_img_repair.stat.isreg
+          - not eveng_lab_archive_qemu_img_repair.stat.exists
+          - >-
+            eveng_lab_archive_results.node_state_leak_files
+            == ['0/test-lab/1/virtiob.qcow2']
 
     - name: Verify restored secondary node state
       ansible.builtin.command:

@@ -319,32 +319,22 @@
   failed_when: eveng_lab_archive_overlay_check.rc not in [0, 3]
   register: eveng_lab_archive_overlay_check
 
-- name: Repair leaked clusters in restored EVE-NG QEMU overlays
-  ansible.builtin.command:
-    argv:
-      - "{{ eveng_lab_archive_qemu_img_command.stdout | trim }}"
-      - check
-      - -q
-      - -r
-      - leaks
-      - "{{ eveng_lab_archive_node_state_root }}/{{ item.item }}"
-  loop: "{{ eveng_lab_archive_overlay_check.results }}"
-  loop_control:
-    label: "{{ item.item }}"
-  when: item.rc == 3
-  changed_when: true
+- name: Select restored overlays with leaked clusters
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_leak_files: >-
+      {{
+        eveng_lab_archive_overlay_check.results
+        | selectattr('rc', 'equalto', 3)
+        | map(attribute='item')
+        | list
+      }}
 
-- name: Validate restored EVE-NG QEMU overlays
-  ansible.builtin.command:
-    argv:
-      - "{{ eveng_lab_archive_qemu_img_command.stdout | trim }}"
-      - check
-      - -q
-      - "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
-  loop_control:
-    label: "{{ item }}"
-  changed_when: false
+- name: Report retained QCOW2 leaked clusters
+  ansible.builtin.debug:
+    msg: >-
+      Restored QCOW2 overlays report leaked clusters and were retained without
+      mutation: {{ eveng_lab_archive_node_state_leak_files | join(', ') }}
+  when: eveng_lab_archive_node_state_leak_files | length > 0
 
 - name: Publish EVE-NG node-state restore result
   ansible.builtin.set_fact:
@@ -359,6 +349,8 @@
             eveng_lab_archive_node_state_controller_stat.stat.checksum,
           'node_state_files':
             eveng_lab_archive_node_state_overlay_members | length,
+          'node_state_leak_files':
+            eveng_lab_archive_node_state_leak_files,
           'quiescence_method': (
             eveng_lab_archive_node_state_metadata.quiescence.method
             if eveng_lab_archive_node_state_metadata_present

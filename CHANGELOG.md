@@ -22,13 +22,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   staged image paths as a rollback-capable transaction.
 - Made the legacy automatic-QEMU-stop setting inert during node-state export.
   Stateful guests must be quiesced before their EVE-NG nodes are stopped.
+- Retained restored QCOW2 overlays byte-for-byte when `qemu-img` reports only
+  leaked clusters instead of modifying migration state automatically.
 
 ### Fixed
 
 - Rejected IOL licence material in migration image companions and accepted the
   archive formats supported by controller inspection.
-- Repaired QCOW2 leaked-cluster metadata in restored node-state copies before
-  final integrity validation.
 - Removed interrupted HybridOps image-staging transactions before starting a
   new EVE-NG image restore.
 

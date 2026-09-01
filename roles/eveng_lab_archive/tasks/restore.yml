@@ -24,7 +24,7 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tzf
+      - -tf
       - "{{ _eveng_lab_archive_path }}"
   delegate_to: localhost
   become: false
@@ -35,7 +35,7 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tvzf
+      - -tvf
       - "{{ _eveng_lab_archive_path }}"
   delegate_to: localhost
   become: false
@@ -62,6 +62,21 @@
         | length == 0
     fail_msg: "EVE-NG lab archive must not contain symbolic or hard links"
 
+- name: Measure expanded EVE-NG lab archive
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - >-
+        import sys,tarfile; archive=tarfile.open(sys.argv[1], 'r:*');
+        print(sum(member.size for member in archive if member.isfile()));
+        archive.close()
+      - "{{ _eveng_lab_archive_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_expanded_size
+
 - name: Ensure EVE-NG labs root exists
   ansible.builtin.file:
     path: "{{ eveng_lab_archive_labs_root }}"
@@ -69,6 +84,45 @@
     owner: "{{ eveng_lab_archive_owner }}"
     group: "{{ eveng_lab_archive_group }}"
     mode: "0775"
+
+- name: Read EVE-NG lab filesystem capacity
+  ansible.builtin.command:
+    argv:
+      - df
+      - -Pk
+      - "{{ eveng_lab_archive_labs_root }}"
+  environment:
+    LC_ALL: C
+  changed_when: false
+  register: eveng_lab_archive_disk_capacity
+
+- name: Resolve EVE-NG lab restore capacity
+  ansible.builtin.set_fact:
+    eveng_lab_archive_restore_available_bytes: >-
+      {{
+        (
+          eveng_lab_archive_disk_capacity.stdout_lines[-1].split()[3]
+          | int
+        ) * 1024
+      }}
+    eveng_lab_archive_restore_required_bytes: >-
+      {{
+        (eveng_lab_archive_controller_stat.stat.size | int)
+        + (eveng_lab_archive_expanded_size.stdout | int)
+        + (eveng_lab_archive_restore_free_reserve_bytes | int)
+      }}
+
+- name: Require EVE-NG lab restore capacity
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_restore_available_bytes | int
+        >= eveng_lab_archive_restore_required_bytes | int
+    fail_msg: >-
+      Insufficient disk space to restore EVE-NG labs: required
+      {{ eveng_lab_archive_restore_required_bytes }} bytes, available
+      {{ eveng_lab_archive_restore_available_bytes }} bytes on the filesystem
+      containing {{ eveng_lab_archive_labs_root }}.
 
 - name: Select archive payload files
   ansible.builtin.set_fact:

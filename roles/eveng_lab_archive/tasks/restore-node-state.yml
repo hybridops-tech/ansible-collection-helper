@@ -38,7 +38,7 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tzf
+      - -tf
       - "{{ _eveng_lab_archive_node_state_path }}"
   delegate_to: localhost
   become: false
@@ -49,12 +49,26 @@
   ansible.builtin.command:
     argv:
       - tar
-      - -tvzf
+      - -tvf
       - "{{ _eveng_lab_archive_node_state_path }}"
   delegate_to: localhost
   become: false
   changed_when: false
   register: eveng_lab_archive_node_state_member_types
+
+- name: Select EVE-NG node-state archive members
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_overlay_members: >-
+      {{
+        eveng_lab_archive_node_state_members.stdout_lines
+        | select('match', '^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        | list
+      }}
+    eveng_lab_archive_node_state_metadata_present: >-
+      {{
+        'hybridops/capture.json'
+        in eveng_lab_archive_node_state_members.stdout_lines
+      }}
 
 - name: Reject unsafe node-state archive members
   ansible.builtin.assert:
@@ -66,7 +80,8 @@
         | length == eveng_lab_archive_node_state_members.stdout_lines | length
       - >-
         eveng_lab_archive_node_state_members.stdout_lines
-        | reject('match', '^.+\.qcow2$')
+        | reject('match', '^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        | reject('equalto', 'hybridops/capture.json')
         | list
         | length == 0
       - >-
@@ -79,11 +94,67 @@
 - name: Require EVE-NG node-state member layout
   ansible.builtin.assert:
     that:
-      - item is match('^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+      - >-
+        item is match('^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        or item == 'hybridops/capture.json'
     fail_msg: "EVE-NG node-state archive member has an invalid path: {{ item }}"
   loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
   loop_control:
     label: "{{ item }}"
+
+- name: Read EVE-NG node-state capture metadata
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -xOf
+      - "{{ _eveng_lab_archive_node_state_path }}"
+      - hybridops/capture.json
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_node_state_metadata_raw
+  when: eveng_lab_archive_node_state_metadata_present | bool
+
+- name: Parse EVE-NG node-state capture metadata
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_metadata: >-
+      {{ eveng_lab_archive_node_state_metadata_raw.stdout | from_json }}
+  when: eveng_lab_archive_node_state_metadata_present | bool
+
+- name: Validate EVE-NG node-state capture metadata
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_node_state_metadata.schema
+        == 'hybridops.eve-node-state-capture/v1'
+      - >-
+        eveng_lab_archive_node_state_metadata.quiescence.method
+        in ['operator-attestation', 'operator-script']
+      - >-
+        eveng_lab_archive_node_state_metadata.quiescence.qemu_processes_absent
+        is sameas true
+      - >-
+        eveng_lab_archive_node_state_metadata.quiescence.method
+        != 'operator-script'
+        or eveng_lab_archive_node_state_metadata.quiescence.script_sha256
+           is match('^[0-9a-f]{64}$')
+    fail_msg: "EVE-NG node-state capture metadata is invalid"
+  when: eveng_lab_archive_node_state_metadata_present | bool
+
+- name: Measure expanded EVE-NG node-state archive
+  ansible.builtin.command:
+    argv:
+      - "{{ ansible_playbook_python }}"
+      - -c
+      - >-
+        import sys,tarfile; archive=tarfile.open(sys.argv[1], 'r:*');
+        print(sum(member.size for member in archive if member.isfile()));
+        archive.close()
+      - "{{ _eveng_lab_archive_node_state_path }}"
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_node_state_expanded_size
 
 - name: Initialise restored EVE-NG tenant paths
   ansible.builtin.set_fact:
@@ -107,14 +178,14 @@
         | unique
         | sort
       }}
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
   loop_control:
     label: "{{ item }}"
 
 - name: Inspect existing node-state paths
   ansible.builtin.stat:
     path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
   register: eveng_lab_archive_existing_node_state
   when: not eveng_lab_archive_overwrite | bool
 
@@ -138,6 +209,45 @@
     group: "{{ eveng_lab_archive_group }}"
     mode: "0755"
 
+- name: Read EVE-NG node-state filesystem capacity
+  ansible.builtin.command:
+    argv:
+      - df
+      - -Pk
+      - "{{ eveng_lab_archive_node_state_root }}"
+  environment:
+    LC_ALL: C
+  changed_when: false
+  register: eveng_lab_archive_node_state_disk_capacity
+
+- name: Resolve EVE-NG node-state restore capacity
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_available_bytes: >-
+      {{
+        (
+          eveng_lab_archive_node_state_disk_capacity.stdout_lines[-1].split()[3]
+          | int
+        ) * 1024
+      }}
+    eveng_lab_archive_node_state_required_bytes: >-
+      {{
+        (eveng_lab_archive_node_state_controller_stat.stat.size | int)
+        + (eveng_lab_archive_node_state_expanded_size.stdout | int)
+        + (eveng_lab_archive_restore_free_reserve_bytes | int)
+      }}
+
+- name: Require EVE-NG node-state restore capacity
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_node_state_available_bytes | int
+        >= eveng_lab_archive_node_state_required_bytes | int
+    fail_msg: >-
+      Insufficient disk space to restore EVE-NG node state: required
+      {{ eveng_lab_archive_node_state_required_bytes }} bytes, available
+      {{ eveng_lab_archive_node_state_available_bytes }} bytes on the filesystem
+      containing {{ eveng_lab_archive_node_state_root }}.
+
 - name: Restore EVE-NG node state
   ansible.builtin.unarchive:
     src: "{{ _eveng_lab_archive_node_state_path }}"
@@ -145,6 +255,12 @@
     owner: "{{ eveng_lab_archive_owner }}"
     group: "{{ eveng_lab_archive_group }}"
     remote_src: false
+
+- name: Remove restored node-state capture metadata
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_node_state_root }}/hybridops"
+    state: absent
+  when: eveng_lab_archive_node_state_metadata_present | bool
 
 - name: Restore EVE-NG tenant root ownership
   ansible.builtin.file:
@@ -189,17 +305,36 @@
   changed_when: false
   register: eveng_lab_archive_qemu_img_command
 
-- name: Validate restored EVE-NG QEMU overlays
+- name: Inspect restored EVE-NG QEMU overlays
   ansible.builtin.command:
     argv:
       - "{{ eveng_lab_archive_qemu_img_command.stdout | trim }}"
       - check
       - -q
       - "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
   loop_control:
     label: "{{ item }}"
   changed_when: false
+  failed_when: eveng_lab_archive_overlay_check.rc not in [0, 3]
+  register: eveng_lab_archive_overlay_check
+
+- name: Select restored overlays with leaked clusters
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_leak_files: >-
+      {{
+        eveng_lab_archive_overlay_check.results
+        | selectattr('rc', 'equalto', 3)
+        | map(attribute='item')
+        | list
+      }}
+
+- name: Report retained QCOW2 leaked clusters
+  ansible.builtin.debug:
+    msg: >-
+      Restored QCOW2 overlays report leaked clusters and were retained without
+      mutation: {{ eveng_lab_archive_node_state_leak_files | join(', ') }}
+  when: eveng_lab_archive_node_state_leak_files | length > 0
 
 - name: Publish EVE-NG node-state restore result
   ansible.builtin.set_fact:
@@ -213,6 +348,25 @@
           'node_state_sha256':
             eveng_lab_archive_node_state_controller_stat.stat.checksum,
           'node_state_files':
-            eveng_lab_archive_node_state_members.stdout_lines | length
+            eveng_lab_archive_node_state_overlay_members | length,
+          'node_state_leak_files':
+            eveng_lab_archive_node_state_leak_files,
+          'quiescence_method': (
+            eveng_lab_archive_node_state_metadata.quiescence.method
+            if eveng_lab_archive_node_state_metadata_present
+            else 'unrecorded'
+          ),
+          'quiescence_script_sha256': (
+            eveng_lab_archive_node_state_metadata.quiescence.script_sha256
+            | default('')
+            if eveng_lab_archive_node_state_metadata_present
+            else ''
+          ),
+          'quiescence_verified_at': (
+            eveng_lab_archive_node_state_metadata.quiescence.verified_at
+            | default('')
+            if eveng_lab_archive_node_state_metadata_present
+            else ''
+          )
         })
       }}

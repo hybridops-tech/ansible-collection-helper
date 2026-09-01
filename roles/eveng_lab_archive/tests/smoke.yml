@@ -7,6 +7,15 @@
     test_root: /tmp/hyops-eveng-lab-archive-test
     test_node_state_root: /tmp/hyops-eveng-lab-node-state-test
     test_archive: /tmp/hyops-eveng-lab-archive-test-output/labs.tar.gz
+    test_image_source: /tmp/hyops-eveng-image-source
+    test_image_root: /tmp/hyops-eveng-image-target
+    test_image_archive: /tmp/hyops-eveng-image-archive/images.tar.gz
+    test_stale_image_transaction: /tmp/.hyops-eveng-images-stale-test
+    test_qemu_img_wrapper: /tmp/hyops-eveng-qemu-img
+    test_qemu_img_repair_marker: /tmp/hyops-eveng-qemu-img-repaired
+    test_quiescence_script: /tmp/hyops-eveng-quiesce.sh
+    test_quiescence_marker: /tmp/hyops-eveng-quiesced
+    test_quiescence_archive: /tmp/hyops-eveng-quiescence-output/labs.tar.gz
     test_api_port: 18765
     eveng_lab_archive_tenant_uid_base: "{{ lookup('pipe', 'id -u') | int }}"
     eveng_lab_archive_tenant_gid: "{{ lookup('pipe', 'id -g') }}"
@@ -19,6 +28,15 @@
         - "{{ test_root }}"
         - "{{ test_node_state_root }}"
         - "{{ test_archive | dirname }}"
+        - "{{ test_image_source }}"
+        - "{{ test_image_root }}"
+        - "{{ test_image_archive | dirname }}"
+        - "{{ test_stale_image_transaction }}"
+        - "{{ test_qemu_img_wrapper }}"
+        - "{{ test_qemu_img_repair_marker }}"
+        - "{{ test_quiescence_script }}"
+        - "{{ test_quiescence_marker }}"
+        - "{{ test_quiescence_archive | dirname }}"
 
     - name: Prepare test lab
       block:
@@ -87,6 +105,30 @@
               - 1M
           changed_when: true
 
+        - name: Write QEMU overlay preservation test wrapper
+          ansible.builtin.copy:
+            dest: "{{ test_qemu_img_wrapper }}"
+            mode: "0755"
+            content: |
+              #!/bin/sh
+              last=""
+              for arg in "$@"; do
+                last="$arg"
+              done
+              case "$*" in
+                *" -r leaks "*)
+                  touch {{ test_qemu_img_repair_marker | quote }}
+                  exit 91
+                  ;;
+                *)
+                  if [ "${last##*/}" = "virtiob.qcow2" ]; then
+                    echo "Leaked cluster 1 refcount=1 reference=0" >&2
+                    exit 3
+                  fi
+                  ;;
+              esac
+              exec /usr/bin/qemu-img "$@"
+
         - name: Create nested managed image directory
           ansible.builtin.file:
             path: >-
@@ -106,6 +148,27 @@
               - 1M
           changed_when: true
 
+    - name: Attempt unquiesced node-state export
+      block:
+        - name: Run unquiesced EVE-NG node-state export
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: export
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_folders: []
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_include_node_state: true
+      rescue:
+        - name: Record unquiesced node-state rejection
+          ansible.builtin.set_fact:
+            eveng_lab_archive_unquiesced_rejected: true
+
+    - name: Require unquiesced node-state rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_unquiesced_rejected | default(false)
+
     - name: Export test lab
       ansible.builtin.include_role:
         name: hybridops.helper.eveng_lab_archive
@@ -118,6 +181,8 @@
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_guest_quiesced: true
+        eveng_lab_archive_stop_running_nodes: true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
         eveng_lab_archive_capture_device_configs: true
@@ -155,6 +220,7 @@
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_guest_quiesced: true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
         eveng_lab_archive_capture_device_configs: true
@@ -234,6 +300,43 @@
             eveng_lab_archive_retained_archive.stat.checksum
             == eveng_lab_archive_current_test_checksum
 
+    - name: Reject EVE-NG restore without sufficient disk space
+      block:
+        - name: Attempt EVE-NG restore above available capacity
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: restore
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_expected_sha256: >-
+              {{ eveng_lab_archive_current_test_checksum }}
+            eveng_lab_archive_overwrite: true
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_restore_free_reserve_bytes: 9000000000000000000
+            eveng_lab_archive_activate_saved_configs: false
+      rescue:
+        - name: Record expected EVE-NG capacity failure
+          ansible.builtin.set_fact:
+            eveng_lab_archive_capacity_failure_observed: true
+            eveng_lab_archive_capacity_failure_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Inspect EVE-NG lab after capacity rejection
+      ansible.builtin.stat:
+        path: "{{ test_root }}/student/routing lab.unl"
+      register: eveng_lab_archive_after_capacity_failure
+
+    - name: Require fail-closed EVE-NG capacity check
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_capacity_failure_observed | default(false)
+          - >-
+            'Insufficient disk space to restore EVE-NG labs'
+            in eveng_lab_archive_capacity_failure_message
+          - eveng_lab_archive_after_capacity_failure.stat.isreg | default(false)
+
     - name: Remove test lab before restore
       ansible.builtin.file:
         path: "{{ item }}"
@@ -242,11 +345,100 @@
         - "{{ test_root }}"
         - "{{ test_node_state_root }}"
 
+    - name: Prepare referenced EVE-NG image fixture
+      ansible.builtin.file:
+        path: "{{ test_image_source }}/qemu/test-image"
+        state: directory
+        mode: "0755"
+
+    - name: Write referenced EVE-NG image fixture
+      ansible.builtin.copy:
+        dest: "{{ test_image_source }}/qemu/test-image/virtioa.qcow2"
+        content: "portable base image\n"
+        mode: "0644"
+
+    - name: Create controller EVE-NG image archive directory
+      ansible.builtin.file:
+        path: "{{ test_image_archive | dirname }}"
+        state: directory
+        mode: "0700"
+
+    - name: Create referenced EVE-NG image archive
+      ansible.builtin.command:
+        argv:
+          - tar
+          - -cJf
+          - "{{ test_image_archive }}"
+          - -C
+          - "{{ test_image_source }}"
+          - qemu
+      changed_when: true
+
+    - name: Inspect referenced EVE-NG image archive
+      ansible.builtin.stat:
+        path: "{{ test_image_archive }}"
+        checksum_algorithm: sha256
+      register: eveng_lab_archive_test_image_stat
+
+    - name: Verify fail-closed EVE-NG image capacity check
+      block:
+        - name: Attempt image restore without sufficient capacity
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: restore
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_expected_sha256: >-
+              {{ eveng_lab_archive_current_test_checksum }}
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_restore_images: true
+            eveng_lab_archive_images_root: "{{ test_image_root }}"
+            eveng_lab_archive_images_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_images_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_images_path: "{{ test_image_archive }}"
+            eveng_lab_archive_images_expected_sha256: >-
+              {{ eveng_lab_archive_test_image_stat.stat.checksum }}
+            eveng_lab_archive_restore_free_reserve_bytes: 9223372036854775807
+            eveng_lab_archive_fixpermissions_command: /bin/true
+            eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+            eveng_lab_archive_api_password_env: USER
+        - name: Reject unexpected EVE-NG image capacity success
+          ansible.builtin.fail:
+            msg: "EVE-NG image restore unexpectedly passed its capacity gate"
+      rescue:
+        - name: Record expected EVE-NG image capacity failure
+          ansible.builtin.set_fact:
+            eveng_lab_archive_image_capacity_failure_observed: true
+            eveng_lab_archive_image_capacity_failure_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Inspect image target after capacity failure
+      ansible.builtin.stat:
+        path: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+      register: eveng_lab_archive_after_image_capacity_failure
+
+    - name: Require fail-closed EVE-NG image capacity check
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_image_capacity_failure_observed | default(false)
+          - >-
+            'Insufficient disk space to restore EVE-NG images'
+            in eveng_lab_archive_image_capacity_failure_message
+          - not eveng_lab_archive_after_image_capacity_failure.stat.exists
+
     - name: Recreate test lab root
       ansible.builtin.file:
         path: "{{ test_root }}"
         state: directory
         mode: "0755"
+
+    - name: Create interrupted EVE-NG image transaction fixture
+      ansible.builtin.file:
+        path: "{{ test_stale_image_transaction }}/payload"
+        state: directory
+        mode: "0700"
 
     - name: Create EVE-NG lab root marker
       ansible.builtin.copy:
@@ -267,10 +459,18 @@
         eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
         eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
         eveng_lab_archive_restore_node_state: true
+        eveng_lab_archive_restore_images: true
+        eveng_lab_archive_images_root: "{{ test_image_root }}"
+        eveng_lab_archive_images_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_images_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_images_path: "{{ test_image_archive }}"
+        eveng_lab_archive_images_expected_sha256: >-
+          {{ eveng_lab_archive_test_image_stat.stat.checksum }}
+        eveng_lab_archive_fixpermissions_command: /bin/true
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_node_state_expected_sha256: >-
           {{ eveng_lab_archive_test_node_state_checksum }}
-        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_qemu_img: "{{ test_qemu_img_wrapper }}"
         eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
         eveng_lab_archive_api_password_env: USER
 
@@ -278,6 +478,16 @@
       ansible.builtin.stat:
         path: "{{ test_root }}/student/routing lab.unl"
       register: eveng_lab_archive_restored_lab
+
+    - name: Verify restored referenced EVE-NG image
+      ansible.builtin.stat:
+        path: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+      register: eveng_lab_archive_restored_image
+
+    - name: Inspect interrupted EVE-NG image transaction fixture
+      ansible.builtin.stat:
+        path: "{{ test_stale_image_transaction }}"
+      register: eveng_lab_archive_stale_transaction_after_restore
 
     - name: Read restored test lab
       ansible.builtin.slurp:
@@ -288,12 +498,68 @@
       ansible.builtin.assert:
         that:
           - eveng_lab_archive_restored_lab.stat.isreg
+          - eveng_lab_archive_restored_image.stat.isreg
+          - not eveng_lab_archive_stale_transaction_after_restore.stat.exists
+          - eveng_lab_archive_results.images_included
+          - eveng_lab_archive_results.images_restored
           - >-
             'config="1"' in
             (eveng_lab_archive_restored_lab_content.content | b64decode)
           - >-
             '<config id="1">' in
             (eveng_lab_archive_restored_lab_content.content | b64decode)
+
+    - name: Write existing EVE-NG image content for rollback test
+      ansible.builtin.copy:
+        dest: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+        content: existing-base
+        mode: "0644"
+
+    - name: Verify transactional EVE-NG image rollback
+      block:
+        - name: Attempt image replacement with a failing permission step
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: restore
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_folders: [student]
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_expected_sha256: >-
+              {{ eveng_lab_archive_current_test_checksum }}
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_restore_images: true
+            eveng_lab_archive_overwrite_images: true
+            eveng_lab_archive_images_root: "{{ test_image_root }}"
+            eveng_lab_archive_images_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_images_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_images_path: "{{ test_image_archive }}"
+            eveng_lab_archive_images_expected_sha256: >-
+              {{ eveng_lab_archive_test_image_stat.stat.checksum }}
+            eveng_lab_archive_fixpermissions_command: /bin/false
+            eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+            eveng_lab_archive_api_password_env: USER
+        - name: Reject unexpected image replacement success
+          ansible.builtin.fail:
+            msg: "EVE-NG image replacement unexpectedly succeeded"
+      rescue:
+        - name: Record expected EVE-NG image replacement failure
+          ansible.builtin.set_fact:
+            eveng_lab_archive_image_rollback_observed: true
+
+    - name: Read EVE-NG image after rollback
+      ansible.builtin.slurp:
+        path: "{{ test_image_root }}/qemu/test-image/virtioa.qcow2"
+      register: eveng_lab_archive_image_after_rollback
+
+    - name: Require transactional EVE-NG image rollback
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_image_rollback_observed | default(false)
+          - >-
+            eveng_lab_archive_image_after_rollback.content | b64decode
+            == 'existing-base'
 
     - name: Verify stale runtime state was cleared before node-state restore
       ansible.builtin.stat:
@@ -340,6 +606,19 @@
           - read -P 0x5a 0 512
           - "{{ test_node_state_root }}/0/test-lab/1/virtioa.qcow2"
       changed_when: false
+
+    - name: Inspect leaked-cluster mutation marker
+      ansible.builtin.stat:
+        path: "{{ test_qemu_img_repair_marker }}"
+      register: eveng_lab_archive_qemu_img_repair
+
+    - name: Require byte-preserving leaked-cluster handling
+      ansible.builtin.assert:
+        that:
+          - not eveng_lab_archive_qemu_img_repair.stat.exists
+          - >-
+            eveng_lab_archive_results.node_state_leak_files
+            == ['0/test-lab/1/virtiob.qcow2']
 
     - name: Verify restored secondary node state
       ansible.builtin.command:
@@ -454,6 +733,54 @@
         that:
           - eveng_lab_archive_restore_wipe.stat.isreg
 
+    - name: Write test guest quiescence action
+      ansible.builtin.copy:
+        dest: "{{ test_quiescence_script }}"
+        mode: "0700"
+        content: |
+          #!/bin/sh
+          set -eu
+          : > {{ test_quiescence_marker | quote }}
+
+    - name: Export test lab with guest quiescence action
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_lab_archive
+      vars:
+        eveng_lab_archive_action: export
+        eveng_lab_archive_labs_root: "{{ test_root }}"
+        eveng_lab_archive_folders: []
+        eveng_lab_archive_path: "{{ test_quiescence_archive }}"
+        eveng_lab_archive_remote_dir: "{{ test_root }}-quiescence-staging"
+        eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_quiesce_script_path: "{{ test_quiescence_script }}"
+        eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
+        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+        eveng_lab_archive_api_password_env: USER
+
+    - name: Inspect test guest quiescence action
+      ansible.builtin.stat:
+        path: "{{ test_quiescence_script }}"
+        checksum_algorithm: sha256
+      register: eveng_lab_archive_test_quiescence_script
+
+    - name: Inspect test guest quiescence marker
+      ansible.builtin.stat:
+        path: "{{ test_quiescence_marker }}"
+      register: eveng_lab_archive_test_quiescence_marker
+
+    - name: Require guest quiescence evidence
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_test_quiescence_marker.stat.isreg
+          - eveng_lab_archive_results.quiescence_method == 'operator-script'
+          - >-
+            eveng_lab_archive_results.quiescence_script_sha256
+            == eveng_lab_archive_test_quiescence_script.stat.checksum
+          - eveng_lab_archive_results.quiescence_verified_at | length > 0
+
   post_tasks:
     - name: Stop mock EVE-NG API
       ansible.builtin.command:
@@ -472,3 +799,9 @@
         - "{{ test_root }}"
         - "{{ test_node_state_root }}"
         - "{{ test_archive | dirname }}"
+        - "{{ test_image_source }}"
+        - "{{ test_image_root }}"
+        - "{{ test_image_archive | dirname }}"
+        - "{{ test_quiescence_script }}"
+        - "{{ test_quiescence_marker }}"
+        - "{{ test_quiescence_archive | dirname }}"

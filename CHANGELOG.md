@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Added a fail-closed EVE-NG restore capacity check before existing lab and
+  node-state data is replaced.
+- Added checksum-verified restoration of referenced EVE-NG base-image
+  companions before lab definitions and QEMU overlays.
+- Added controller-supplied EVE-NG guest quiescence actions with bounded
+  QEMU-stop verification and checksummed capture evidence.
+
+### Changed
+
+- Separated base-image replacement from lab-definition overwrite and promoted
+  staged image paths as a rollback-capable transaction.
+- Made the legacy automatic-QEMU-stop setting inert during node-state export.
+  Stateful guests must be quiesced before their EVE-NG nodes are stopped.
+- Retained restored QCOW2 overlays byte-for-byte when `qemu-img` reports only
+  leaked clusters instead of modifying migration state automatically.
+
+### Fixed
+
+- Rejected IOL licence material in migration image companions and accepted the
+  archive formats supported by controller inspection.
+- Removed interrupted HybridOps image-staging transactions before starting a
+  new EVE-NG image restore.
+
 ## [0.1.10] - 2026-08-29
 
 ### Added

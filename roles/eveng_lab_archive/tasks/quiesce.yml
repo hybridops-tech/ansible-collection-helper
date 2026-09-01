@@ -1,0 +1,125 @@
+---
+- name: Inspect controller quiescence script
+  ansible.builtin.stat:
+    path: "{{ eveng_lab_archive_quiesce_script_path }}"
+    follow: false
+    checksum_algorithm: sha256
+  delegate_to: localhost
+  become: false
+  register: eveng_lab_archive_quiesce_script_stat
+  when: eveng_lab_archive_quiesce_script_path | trim | length > 0
+
+- name: Validate controller quiescence script
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_quiesce_script_stat.stat.isreg | default(false)
+      - not (eveng_lab_archive_quiesce_script_stat.stat.islnk | default(false))
+      - eveng_lab_archive_quiesce_script_stat.stat.size | int > 0
+      - eveng_lab_archive_quiesce_script_stat.stat.size | int <= 1048576
+    fail_msg: >-
+      The EVE-NG quiescence script must be a non-empty regular controller file
+      no larger than 1 MiB.
+  delegate_to: localhost
+  become: false
+  when: eveng_lab_archive_quiesce_script_path | trim | length > 0
+
+- name: Prepare remote quiescence staging
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_remote_dir }}"
+    state: directory
+    mode: "0700"
+  when: eveng_lab_archive_quiesce_script_path | trim | length > 0
+
+- name: Record EVE-NG guest quiescence start
+  ansible.builtin.command:
+    argv:
+      - date
+      - +%s
+  changed_when: false
+  register: eveng_lab_archive_quiescence_start
+
+- name: Run EVE-NG guest quiescence action
+  when: eveng_lab_archive_quiesce_script_path | trim | length > 0
+  block:
+    - name: Stage EVE-NG guest quiescence action
+      ansible.builtin.copy:
+        src: "{{ eveng_lab_archive_quiesce_script_path }}"
+        dest: "{{ eveng_lab_archive_remote_dir }}/quiesce.sh"
+        mode: "0700"
+      no_log: true
+
+    - name: Inspect staged EVE-NG guest quiescence action
+      ansible.builtin.stat:
+        path: "{{ eveng_lab_archive_remote_dir }}/quiesce.sh"
+        checksum_algorithm: sha256
+      register: eveng_lab_archive_staged_quiesce_script_stat
+      no_log: true
+
+    - name: Execute EVE-NG guest quiescence action
+      ansible.builtin.command:
+        argv:
+          - timeout
+          - --signal=TERM
+          - --kill-after=5
+          - "{{ eveng_lab_archive_quiesce_timeout_s | string }}"
+          - /bin/sh
+          - "{{ eveng_lab_archive_remote_dir }}/quiesce.sh"
+      changed_when: true
+      no_log: true
+  rescue:
+    - name: Stop after EVE-NG guest quiescence failure
+      ansible.builtin.fail:
+        msg: >-
+          EVE-NG guest quiescence action failed or timed out. Source state was
+          not captured.
+  always:
+    - name: Remove remote EVE-NG guest quiescence action
+      ansible.builtin.file:
+        path: "{{ eveng_lab_archive_remote_dir }}/quiesce.sh"
+        state: absent
+      no_log: true
+
+- name: Wait for stopped EVE-NG QEMU guests
+  ansible.builtin.shell: |
+    set -eu
+    deadline=$((
+      {{ eveng_lab_archive_quiescence_start.stdout | int }}
+      + {{ eveng_lab_archive_quiesce_timeout_s | int }}
+    ))
+    while pgrep -f '[/]opt/qemu[^ ]*/bin/qemu-system-' >/dev/null; do
+      if [ "$(date +%s)" -ge "$deadline" ]; then
+        echo 'Timed out waiting for EVE-NG QEMU guests to stop' >&2
+        exit 21
+      fi
+      sleep 2
+    done
+  args:
+    executable: /bin/bash
+  changed_when: false
+
+- name: Record EVE-NG guest quiescence time
+  ansible.builtin.command:
+    argv:
+      - date
+      - -u
+      - +%Y-%m-%dT%H:%M:%SZ
+  changed_when: false
+  register: eveng_lab_archive_quiescence_time
+
+- name: Publish EVE-NG guest quiescence evidence
+  ansible.builtin.set_fact:
+    eveng_lab_archive_quiescence_evidence:
+      method: >-
+        {{
+          'operator-script'
+          if eveng_lab_archive_quiesce_script_path | trim | length > 0
+          else 'operator-attestation'
+        }}
+      qemu_processes_absent: true
+      verified_at: "{{ eveng_lab_archive_quiescence_time.stdout }}"
+      script_sha256: >-
+        {{
+          eveng_lab_archive_staged_quiesce_script_stat.stat.checksum
+          if eveng_lab_archive_quiesce_script_path | trim | length > 0
+          else ''
+        }}

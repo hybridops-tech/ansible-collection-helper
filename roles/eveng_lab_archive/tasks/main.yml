@@ -46,6 +46,9 @@
       - eveng_lab_archive_restore_node_state is boolean
       - eveng_lab_archive_stop_running_nodes is boolean
       - eveng_lab_archive_guest_quiesced is boolean
+      - eveng_lab_archive_quiesce_script_path is string
+      - eveng_lab_archive_quiesce_timeout_s | int >= 1
+      - eveng_lab_archive_quiesce_timeout_s | int <= 3600
       - eveng_lab_archive_restore_images is boolean
       - eveng_lab_archive_overwrite_images is boolean
       - eveng_lab_archive_restore_free_reserve_bytes | int >= 0
@@ -68,14 +71,17 @@
       - eveng_lab_archive_api_password_env | string | trim | length > 0
     fail_msg: "EVE-NG lab archive settings are invalid"
 
-- name: Require guest-quiesced EVE-NG node state
+- name: Require one EVE-NG guest quiescence method
   ansible.builtin.assert:
     that:
-      - eveng_lab_archive_guest_quiesced | bool
+      - >-
+        (eveng_lab_archive_guest_quiesced | bool)
+        !=
+        (eveng_lab_archive_quiesce_script_path | trim | length > 0)
     fail_msg: >-
-      EVE-NG node-state export requires guest quiescence. Shut down stateful
-      guests inside their operating systems, stop the remaining nodes, and
-      retry the export.
+      EVE-NG node-state export requires exactly one quiescence method: set
+      eveng_lab_archive_guest_quiesced or provide
+      eveng_lab_archive_quiesce_script_path.
   when:
     - eveng_lab_archive_action == 'export'
     - eveng_lab_archive_include_node_state | bool
@@ -130,6 +136,12 @@
       - item is not search('(^|/)\.\.(/|$)')
     fail_msg: "EVE-NG lab archive folders must be safe relative paths"
   loop: "{{ eveng_lab_archive_folders }}"
+
+- name: Quiesce EVE-NG guests
+  ansible.builtin.include_tasks: quiesce.yml
+  when:
+    - eveng_lab_archive_action == 'export'
+    - eveng_lab_archive_include_node_state | bool
 
 - name: Capture saved EVE-NG device configurations
   ansible.builtin.include_tasks: capture-device-configs.yml

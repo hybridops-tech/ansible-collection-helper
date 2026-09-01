@@ -13,6 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   node-state data is replaced.
 - Added checksum-verified restoration of referenced EVE-NG base-image
   companions before lab definitions and QEMU overlays.
+- Added controller-supplied EVE-NG guest quiescence actions with bounded
+  QEMU-stop verification and checksummed capture evidence.
 
 ### Changed
 

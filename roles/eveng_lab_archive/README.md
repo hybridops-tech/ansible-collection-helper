@@ -63,6 +63,17 @@ fetched archives have been read and their expected contents verified.
 persist it as a standing environment acknowledgement. The legacy
 `eveng_lab_archive_stop_running_nodes` input is accepted but has no effect.
 
+For repeatable shutdown, provide a controller-side POSIX shell script instead:
+
+```yaml
+eveng_lab_archive_quiesce_script_path: /srv/hybridops/quiesce-lab.sh
+eveng_lab_archive_quiesce_timeout_s: 300
+```
+
+The role runs the script on the EVE-NG host, waits for all QEMU processes to
+stop, and records the script checksum. Script content and output are not stored.
+The script and `eveng_lab_archive_guest_quiesced` are mutually exclusive.
+
 Restore requires the companion archive checksum:
 
 ```yaml

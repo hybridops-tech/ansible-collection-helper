@@ -19,6 +19,8 @@ eveng_lab_archive_restore_images: false
 eveng_lab_archive_restore_free_reserve_bytes: 67108864
 eveng_lab_archive_stop_running_nodes: false
 eveng_lab_archive_guest_quiesced: false
+eveng_lab_archive_quiesce_script_path: ""
+eveng_lab_archive_quiesce_timeout_s: 300
 eveng_lab_archive_node_state_root: /opt/unetlab/tmp
 eveng_lab_archive_node_state_path: ""
 eveng_lab_archive_node_state_expected_sha256: ""

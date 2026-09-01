@@ -56,6 +56,20 @@
   changed_when: false
   register: eveng_lab_archive_node_state_member_types
 
+- name: Select EVE-NG node-state archive members
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_overlay_members: >-
+      {{
+        eveng_lab_archive_node_state_members.stdout_lines
+        | select('match', '^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        | list
+      }}
+    eveng_lab_archive_node_state_metadata_present: >-
+      {{
+        'hybridops/capture.json'
+        in eveng_lab_archive_node_state_members.stdout_lines
+      }}
+
 - name: Reject unsafe node-state archive members
   ansible.builtin.assert:
     that:
@@ -66,7 +80,8 @@
         | length == eveng_lab_archive_node_state_members.stdout_lines | length
       - >-
         eveng_lab_archive_node_state_members.stdout_lines
-        | reject('match', '^.+\.qcow2$')
+        | reject('match', '^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        | reject('equalto', 'hybridops/capture.json')
         | list
         | length == 0
       - >-
@@ -79,11 +94,52 @@
 - name: Require EVE-NG node-state member layout
   ansible.builtin.assert:
     that:
-      - item is match('^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+      - >-
+        item is match('^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        or item == 'hybridops/capture.json'
     fail_msg: "EVE-NG node-state archive member has an invalid path: {{ item }}"
   loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
   loop_control:
     label: "{{ item }}"
+
+- name: Read EVE-NG node-state capture metadata
+  ansible.builtin.command:
+    argv:
+      - tar
+      - -xOf
+      - "{{ _eveng_lab_archive_node_state_path }}"
+      - hybridops/capture.json
+  delegate_to: localhost
+  become: false
+  changed_when: false
+  register: eveng_lab_archive_node_state_metadata_raw
+  when: eveng_lab_archive_node_state_metadata_present | bool
+
+- name: Parse EVE-NG node-state capture metadata
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_metadata: >-
+      {{ eveng_lab_archive_node_state_metadata_raw.stdout | from_json }}
+  when: eveng_lab_archive_node_state_metadata_present | bool
+
+- name: Validate EVE-NG node-state capture metadata
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_node_state_metadata.schema
+        == 'hybridops.eve-node-state-capture/v1'
+      - >-
+        eveng_lab_archive_node_state_metadata.quiescence.method
+        in ['operator-attestation', 'operator-script']
+      - >-
+        eveng_lab_archive_node_state_metadata.quiescence.qemu_processes_absent
+        is sameas true
+      - >-
+        eveng_lab_archive_node_state_metadata.quiescence.method
+        != 'operator-script'
+        or eveng_lab_archive_node_state_metadata.quiescence.script_sha256
+           is match('^[0-9a-f]{64}$')
+    fail_msg: "EVE-NG node-state capture metadata is invalid"
+  when: eveng_lab_archive_node_state_metadata_present | bool
 
 - name: Measure expanded EVE-NG node-state archive
   ansible.builtin.command:
@@ -122,14 +178,14 @@
         | unique
         | sort
       }}
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
   loop_control:
     label: "{{ item }}"
 
 - name: Inspect existing node-state paths
   ansible.builtin.stat:
     path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
   register: eveng_lab_archive_existing_node_state
   when: not eveng_lab_archive_overwrite | bool
 
@@ -200,6 +256,12 @@
     group: "{{ eveng_lab_archive_group }}"
     remote_src: false
 
+- name: Remove restored node-state capture metadata
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_node_state_root }}/hybridops"
+    state: absent
+  when: eveng_lab_archive_node_state_metadata_present | bool
+
 - name: Restore EVE-NG tenant root ownership
   ansible.builtin.file:
     path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
@@ -250,7 +312,7 @@
       - check
       - -q
       - "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
   loop_control:
     label: "{{ item }}"
   changed_when: false
@@ -279,7 +341,7 @@
       - check
       - -q
       - "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
+  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
   loop_control:
     label: "{{ item }}"
   changed_when: false
@@ -296,6 +358,23 @@
           'node_state_sha256':
             eveng_lab_archive_node_state_controller_stat.stat.checksum,
           'node_state_files':
-            eveng_lab_archive_node_state_members.stdout_lines | length
+            eveng_lab_archive_node_state_overlay_members | length,
+          'quiescence_method': (
+            eveng_lab_archive_node_state_metadata.quiescence.method
+            if eveng_lab_archive_node_state_metadata_present
+            else 'unrecorded'
+          ),
+          'quiescence_script_sha256': (
+            eveng_lab_archive_node_state_metadata.quiescence.script_sha256
+            | default('')
+            if eveng_lab_archive_node_state_metadata_present
+            else ''
+          ),
+          'quiescence_verified_at': (
+            eveng_lab_archive_node_state_metadata.quiescence.verified_at
+            | default('')
+            if eveng_lab_archive_node_state_metadata_present
+            else ''
+          )
         })
       }}

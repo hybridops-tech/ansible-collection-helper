@@ -18,6 +18,27 @@
       EVE-NG node-state root does not exist:
       {{ eveng_lab_archive_node_state_root }}
 
+- name: Prepare node-state capture metadata directory
+  ansible.builtin.file:
+    path: "{{ eveng_lab_archive_remote_dir }}/hybridops"
+    state: directory
+    mode: "0700"
+
+- name: Write node-state capture metadata
+  ansible.builtin.copy:
+    dest: "{{ eveng_lab_archive_remote_dir }}/hybridops/capture.json"
+    mode: "0600"
+    content: >-
+      {{ {
+        'schema': 'hybridops.eve-node-state-capture/v1',
+        'quiescence': {
+          'method': eveng_lab_archive_quiescence_evidence.method,
+          'qemu_processes_absent': true,
+          'script_sha256':
+            eveng_lab_archive_quiescence_evidence.script_sha256
+        }
+      } | to_nice_json }}
+
 - name: Select available qemu-img command
   ansible.builtin.shell: |
     set -eu
@@ -103,6 +124,9 @@
       - "{{ eveng_lab_archive_node_state_root }}"
       - -T
       - "{{ eveng_lab_archive_remote_dir }}/node-state-members.txt"
+      - -C
+      - "{{ eveng_lab_archive_remote_dir }}"
+      - hybridops/capture.json
   changed_when: true
   when: eveng_lab_archive_node_state_overlays | length > 0
 
@@ -147,10 +171,13 @@
     that:
       - >-
         eveng_lab_archive_node_state_controller_members.stdout_lines | sort
-        == eveng_lab_archive_node_state_overlays
-           | map(attribute='path')
-           | map('regex_replace', '^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '')
-           | sort
+        == ((
+          eveng_lab_archive_node_state_overlays
+          | map(attribute='path')
+          | map('regex_replace', '^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '')
+          | list
+          + ['hybridops/capture.json']
+        ) | sort)
     fail_msg: "Fetched EVE-NG node-state archive does not match the selected overlays"
   delegate_to: localhost
   become: false
@@ -182,7 +209,12 @@
             if eveng_lab_archive_node_state_overlays | length > 0
             else ''
           ),
-          'node_state_files': eveng_lab_archive_node_state_overlays | length
+          'node_state_files': eveng_lab_archive_node_state_overlays | length,
+          'quiescence_method': eveng_lab_archive_quiescence_evidence.method,
+          'quiescence_script_sha256':
+            eveng_lab_archive_quiescence_evidence.script_sha256,
+          'quiescence_verified_at':
+            eveng_lab_archive_quiescence_evidence.verified_at
         })
       }}
 
@@ -212,7 +244,8 @@
             eveng_lab_archive_node_state_controller_members.stdout_lines
             if eveng_lab_archive_results.node_state_included
             else []
-          )
+          ),
+          'quiescence': eveng_lab_archive_quiescence_evidence
         }
       } | to_nice_json }}
   delegate_to: localhost

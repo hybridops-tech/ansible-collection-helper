@@ -13,6 +13,9 @@
     test_stale_image_transaction: /tmp/.hyops-eveng-images-stale-test
     test_qemu_img_wrapper: /tmp/hyops-eveng-qemu-img
     test_qemu_img_repair_marker: /tmp/hyops-eveng-qemu-img-repaired
+    test_quiescence_script: /tmp/hyops-eveng-quiesce.sh
+    test_quiescence_marker: /tmp/hyops-eveng-quiesced
+    test_quiescence_archive: /tmp/hyops-eveng-quiescence-output/labs.tar.gz
     test_api_port: 18765
     eveng_lab_archive_tenant_uid_base: "{{ lookup('pipe', 'id -u') | int }}"
     eveng_lab_archive_tenant_gid: "{{ lookup('pipe', 'id -g') }}"
@@ -31,6 +34,9 @@
         - "{{ test_stale_image_transaction }}"
         - "{{ test_qemu_img_wrapper }}"
         - "{{ test_qemu_img_repair_marker }}"
+        - "{{ test_quiescence_script }}"
+        - "{{ test_quiescence_marker }}"
+        - "{{ test_quiescence_archive | dirname }}"
 
     - name: Prepare test lab
       block:
@@ -726,6 +732,54 @@
         that:
           - eveng_lab_archive_restore_wipe.stat.isreg
 
+    - name: Write test guest quiescence action
+      ansible.builtin.copy:
+        dest: "{{ test_quiescence_script }}"
+        mode: "0700"
+        content: |
+          #!/bin/sh
+          set -eu
+          : > {{ test_quiescence_marker | quote }}
+
+    - name: Export test lab with guest quiescence action
+      ansible.builtin.include_role:
+        name: hybridops.helper.eveng_lab_archive
+      vars:
+        eveng_lab_archive_action: export
+        eveng_lab_archive_labs_root: "{{ test_root }}"
+        eveng_lab_archive_folders: []
+        eveng_lab_archive_path: "{{ test_quiescence_archive }}"
+        eveng_lab_archive_remote_dir: "{{ test_root }}-quiescence-staging"
+        eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+        eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+        eveng_lab_archive_include_node_state: true
+        eveng_lab_archive_quiesce_script_path: "{{ test_quiescence_script }}"
+        eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
+        eveng_lab_archive_qemu_img: /usr/bin/qemu-img
+        eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+        eveng_lab_archive_api_password_env: USER
+
+    - name: Inspect test guest quiescence action
+      ansible.builtin.stat:
+        path: "{{ test_quiescence_script }}"
+        checksum_algorithm: sha256
+      register: eveng_lab_archive_test_quiescence_script
+
+    - name: Inspect test guest quiescence marker
+      ansible.builtin.stat:
+        path: "{{ test_quiescence_marker }}"
+      register: eveng_lab_archive_test_quiescence_marker
+
+    - name: Require guest quiescence evidence
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_test_quiescence_marker.stat.isreg
+          - eveng_lab_archive_results.quiescence_method == 'operator-script'
+          - >-
+            eveng_lab_archive_results.quiescence_script_sha256
+            == eveng_lab_archive_test_quiescence_script.stat.checksum
+          - eveng_lab_archive_results.quiescence_verified_at | length > 0
+
   post_tasks:
     - name: Stop mock EVE-NG API
       ansible.builtin.command:
@@ -747,3 +801,6 @@
         - "{{ test_image_source }}"
         - "{{ test_image_root }}"
         - "{{ test_image_archive | dirname }}"
+        - "{{ test_quiescence_script }}"
+        - "{{ test_quiescence_marker }}"
+        - "{{ test_quiescence_archive | dirname }}"

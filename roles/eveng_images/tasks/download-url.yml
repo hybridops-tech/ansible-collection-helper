@@ -313,6 +313,9 @@
           ~ (item.url | hash('md5'))[:8] ~ '.tar.gz'
         )
       }}
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
   loop: "{{ eveng_images_list }}"
   loop_control:
     label: "{{ item.name | default(item.url) }}"

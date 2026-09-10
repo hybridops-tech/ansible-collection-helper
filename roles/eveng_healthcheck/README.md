@@ -45,7 +45,7 @@ A component runs only when the selected level includes it and the corresponding 
 
 ```yaml
 # Component flags (auto-derived from health_check_level, but overridable)
-health_check_services: true     # Apache, MySQL service status
+health_check_services: true     # Apache, MySQL, guacd, Tomcat and first boot
 health_check_database: true     # Database existence, tables, users
 health_check_api: true          # API status, authentication
 health_check_kvm: true          # KVM module, virtualisation support
@@ -72,8 +72,9 @@ Ansible collections:
 
 Scope:
 
-- Service status (Apache, MySQL)
-- Port listening checks (80, 443, 3306)
+- Service status (Apache, MySQL, guacd, Tomcat)
+- First-boot completion
+- Port listening checks (80, 3306, 4822, 8080)
 - Database connectivity
 - API authentication
 - KVM module status
@@ -199,7 +200,7 @@ Tags support selective execution of specific health check components.
 | Tag                     | Description          | Scope                                          |
 |-------------------------|----------------------|------------------------------------------------|
 | `health`                | All enabled checks   | All components allowed by `health_check_level` |
-| `services`              | Service checks       | Apache, MySQL status and ports                 |
+| `services`              | Service checks       | EVE-NG web, database and HTML5 console services|
 | `database`              | Database checks      | Database existence, tables, users              |
 | `api`                   | API checks           | Status, authentication, endpoints              |
 | `virtualisation`, `kvm` | Virtualisation checks| KVM module, device, CPU support                |

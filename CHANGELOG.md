@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-29
+
 ### Added
 
 - Added a fail-closed EVE-NG restore capacity check before existing lab and
@@ -15,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   companions before lab definitions and QEMU overlays.
 - Added controller-supplied EVE-NG guest quiescence actions with bounded
   QEMU-stop verification and checksummed capture evidence.
+- Added native EVE-NG device-configuration capture before preservation and
+  activation after restore.
 
 ### Changed
 
@@ -24,23 +28,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Stateful guests must be quiesced before their EVE-NG nodes are stopped.
 - Retained restored QCOW2 overlays byte-for-byte when `qemu-img` reports only
   leaked clusters instead of modifying migration state automatically.
-
-### Fixed
-
-- Rejected IOL licence material in migration image companions and accepted the
-  archive formats supported by controller inspection.
-- Removed interrupted HybridOps image-staging transactions before starting a
-  new EVE-NG image restore.
-
-## [0.1.10] - 2026-08-29
-
-### Added
-
-- Added native EVE-NG device-configuration capture before preservation and
-  activation after restore.
-
-### Changed
-
 - Retained source-bound image downloads by default so interrupted image runs
   can resume without repeating completed transfers.
 - Skipped unchanged local image archives and bounded local synchronization.
@@ -49,6 +36,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Avoided checksum and archive-type scans for unchanged EVE-NG images during
+  incremental reconciliation.
+- Required EVE-NG health checks to verify first-boot completion, Tomcat, and
+  the IPv4 Guacamole daemon endpoint.
+- Applied a bounded, configurable timeout to EVE-NG native configuration
+  exports so multi-node labs are not limited to the transport default.
+- Rejected IOL licence material in migration image companions and accepted the
+  archive formats supported by controller inspection.
+- Removed interrupted HybridOps image-staging transactions before starting a
+  new EVE-NG image restore.
 - Staged and verified EVE-NG lab exports before promotion, retaining one
   verified fallback generation with its manifest and node-state archive.
 - Required every requested image archive to produce verified installed content

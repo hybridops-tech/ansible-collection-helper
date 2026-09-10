@@ -34,6 +34,7 @@ eveng_lab_archive_tenant_uid_base: 32768
 eveng_lab_archive_tenant_gid: "32768"
 eveng_lab_archive_qemu_img: /opt/qemu/bin/qemu-img
 eveng_lab_archive_capture_device_configs: false
+eveng_lab_archive_config_export_timeout_s: 300
 eveng_lab_archive_activate_saved_configs: true
 eveng_lab_archive_api_base_url: http://127.0.0.1
 eveng_lab_archive_api_username: admin

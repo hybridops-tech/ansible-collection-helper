@@ -186,6 +186,7 @@
         eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
         eveng_lab_archive_qemu_img: /usr/bin/qemu-img
         eveng_lab_archive_capture_device_configs: true
+        eveng_lab_archive_config_export_timeout_s: 45
         eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
         eveng_lab_archive_api_password_env: USER
 

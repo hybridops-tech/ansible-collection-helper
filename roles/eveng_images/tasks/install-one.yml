@@ -183,7 +183,7 @@
   args:
     executable: /bin/bash
   environment:
-    HYOPS_IMAGE_ARCHIVE: "{{ image_detection.item.path }}"
+    HYOPS_IMAGE_ARCHIVE: "{{ image_candidate.file.path }}"
     HYOPS_IMAGE_TYPE: "{{ image_detection.stdout | trim }}"
     HYOPS_ADDONS_DIR: "{{ eveng_images_addons_dir }}"
     HYOPS_RAW_QEMU_LAYOUT: "{{ eveng_images_raw_qemu_layout }}"

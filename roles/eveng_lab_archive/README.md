@@ -22,11 +22,13 @@ archive is built:
 ```yaml
 eveng_lab_archive_capture_device_configs: true
 eveng_lab_archive_api_password_env: EVENG_ADMIN_PASSWORD
+eveng_lab_archive_config_export_timeout_s: 300
 ```
 
 The role uses EVE-NG's local API. A failed capture stops preservation before
-the execution host is released. Intended device changes must be saved to
-startup configuration before capture.
+the execution host is released. The native export timeout accepts values from
+1 to 3600 seconds. Intended device changes must be saved to startup
+configuration before capture.
 
 Each export is staged and verified before it replaces the current archive. The
 previous verified generation is retained with a `.previous` suffix, including

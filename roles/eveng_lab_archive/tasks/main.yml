@@ -53,6 +53,8 @@
       - eveng_lab_archive_overwrite_images is boolean
       - eveng_lab_archive_restore_free_reserve_bytes | int >= 0
       - eveng_lab_archive_capture_device_configs is boolean
+      - eveng_lab_archive_config_export_timeout_s | int >= 1
+      - eveng_lab_archive_config_export_timeout_s | int <= 3600
       - eveng_lab_archive_activate_saved_configs is boolean
       - eveng_lab_archive_api_validate_certs is boolean
       - eveng_lab_archive_node_state_root is match('^/')

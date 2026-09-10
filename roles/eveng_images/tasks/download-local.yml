@@ -13,6 +13,9 @@
 - name: Check if local path exists
   ansible.builtin.stat:
     path: "{{ eveng_images_local_path }}"
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
   delegate_to: localhost
   become: false
   register: eveng_images_local_path_stat
@@ -144,6 +147,9 @@
 - name: Inspect copied local images
   ansible.builtin.stat:
     path: "{{ eveng_images_cache_dir }}/{{ item.relative_path }}"
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
   loop: "{{ eveng_images_local_requested_files }}"
   loop_control:
     label: "{{ item.relative_path }}"

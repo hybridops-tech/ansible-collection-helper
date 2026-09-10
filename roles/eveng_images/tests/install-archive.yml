@@ -182,6 +182,15 @@
         path: "{{ test_root }}/fixpermissions-ran"
         state: absent
 
+    - name: Make installed source archives unreadable
+      ansible.builtin.file:
+        path: "{{ eveng_images_cache_dir }}/{{ item }}"
+        mode: "0000"
+      loop:
+        - linux-test.tar.gz
+        - iol-test.tar.gz
+        - BIGIP-11.6.0.0.0.401.ALL.qcow2.zip
+
     - name: Repeat archive installer
       ansible.builtin.include_role:
         name: hybridops.helper.eveng_images
@@ -202,6 +211,9 @@
         that:
           - eveng_images_reused_disk.content | b64decode == 'operator-state'
           - not eveng_images_reused_fixpermissions.stat.exists
+          - eveng_images_pending_installations | length == 0
+          - eveng_images_reusable_detection_inputs | length == 3
+          - eveng_images_pending_detection_inputs | length == 0
           - eveng_images_requested_count | int == 3
           - eveng_images_installed_count | int == 3
 

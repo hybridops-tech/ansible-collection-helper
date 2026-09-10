@@ -1,37 +1,46 @@
 ---
 # Service health checks
 
-- name: Check Apache service status
-  ansible.builtin.systemd:
-    name: apache2
-  register: apache_service
-  failed_when: false
-  tags:
-    - health_services
-    - apache
-
 - name: Collect service facts
   ansible.builtin.service_facts:
-  register: service_facts_result
   tags:
     - health_services
 
-- name: Set Apache status
+- name: Set EVE-NG service status  # noqa var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     health_check_results: >-
       {{
         health_check_results
         | combine(
-            {'services': health_check_results.services | combine({'apache': apache_status})}
+            {
+              'services': health_check_results.services
+              | combine(
+                  {
+                    'apache': apache_status,
+                    'guacd': guacd_status,
+                    'tomcat': tomcat_status
+                  }
+                )
+            }
           )
       }}
   vars:
+    eveng_healthcheck_apache_unit: "{{ ansible_facts.services.get('apache2.service', {}) }}"
+    eveng_healthcheck_guacd_unit: "{{ ansible_facts.services.get('guacd.service', {}) }}"
+    eveng_healthcheck_tomcat_unit: "{{ ansible_facts.services.get('tomcat9.service', {}) }}"
     apache_status:
-      running: "{{ ansible_facts.services['apache2.service'].state == 'running' }}"
-      enabled: "{{ ansible_facts.services['apache2.service'].status == 'enabled' }}"
+      running: "{{ eveng_healthcheck_apache_unit.get('state', '') == 'running' }}"
+      enabled: "{{ eveng_healthcheck_apache_unit.get('status', '') == 'enabled' }}"
+    guacd_status:
+      running: "{{ eveng_healthcheck_guacd_unit.get('state', '') == 'running' }}"
+      enabled: "{{ eveng_healthcheck_guacd_unit.get('status', '') == 'enabled' }}"
+    tomcat_status:
+      running: "{{ eveng_healthcheck_tomcat_unit.get('state', '') == 'running' }}"
+      enabled: "{{ eveng_healthcheck_tomcat_unit.get('status', '') == 'enabled' }}"
   tags:
     - health_services
     - apache
+    - guacamole
 
 - name: Refresh service facts for database services
   ansible.builtin.service_facts:
@@ -41,13 +50,13 @@
 
 - name: Determine database service
   ansible.builtin.set_fact:
-    db_service_name: >-
+    eveng_healthcheck_db_service_name: >-
       {{ 'mysql.service' if 'mysql.service' in ansible_facts.services else 'mariadb.service' }}
   tags:
     - health_services
     - mysql
 
-- name: Set database service status
+- name: Set database service status  # noqa var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     health_check_results: >-
       {{
@@ -57,19 +66,22 @@
           )
       }}
   vars:
+    eveng_healthcheck_database_unit: >-
+      {{ ansible_facts.services.get(eveng_healthcheck_db_service_name, {}) }}
     db_status:
-      running: "{{ ansible_facts.services[db_service_name].state == 'running' }}"
-      enabled: "{{ ansible_facts.services[db_service_name].status == 'enabled' }}"
-      service: "{{ db_service_name | replace('.service', '') }}"
+      running: "{{ eveng_healthcheck_database_unit.get('state', '') == 'running' }}"
+      enabled: "{{ eveng_healthcheck_database_unit.get('status', '') == 'enabled' }}"
+      service: "{{ eveng_healthcheck_db_service_name | replace('.service', '') }}"
   tags:
     - health_services
     - mysql
 
 - name: Check Apache port listening
   ansible.builtin.wait_for:
+    host: 127.0.0.1
     port: 80
     timeout: 5
-  register: apache_port
+  register: eveng_healthcheck_apache_port
   failed_when: false
   tags:
     - health_services
@@ -78,16 +90,49 @@
 
 - name: Check MySQL port listening
   ansible.builtin.wait_for:
+    host: 127.0.0.1
     port: 3306
     timeout: 5
-  register: mysql_port
+  register: eveng_healthcheck_mysql_port
   failed_when: false
   tags:
     - health_services
     - mysql
     - ports
 
-- name: Update service health results
+- name: Check guacd IPv4 loopback port
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 4822
+    timeout: 5
+  register: eveng_healthcheck_guacd_port
+  failed_when: false
+  tags:
+    - health_services
+    - guacamole
+    - ports
+
+- name: Check Guacamole web application port
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: 8080
+    timeout: 5
+  register: eveng_healthcheck_tomcat_port
+  failed_when: false
+  tags:
+    - health_services
+    - guacamole
+    - ports
+
+- name: Check EVE-NG first-boot completion marker
+  ansible.builtin.stat:
+    path: /opt/ovf/.configured
+  register: eveng_healthcheck_first_boot_marker
+  tags:
+    - health_services
+    - eveng_wizard
+
+- name: Update service health results  # noqa var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     health_check_results: >-
       {{
@@ -98,17 +143,48 @@
       }}
   vars:
     port_status:
-      apache: "{{ apache_port is success }}"
-      mysql: "{{ mysql_port is success }}"
+      apache: "{{ eveng_healthcheck_apache_port.state | default('') == 'started' }}"
+      mysql: "{{ eveng_healthcheck_mysql_port.state | default('') == 'started' }}"
+      guacd: "{{ eveng_healthcheck_guacd_port.state | default('') == 'started' }}"
+      tomcat: "{{ eveng_healthcheck_tomcat_port.state | default('') == 'started' }}"
   tags:
     - health_services
     - ports
+
+- name: Record EVE-NG first-boot state  # noqa var-naming[no-role-prefix]
+  ansible.builtin.set_fact:
+    health_check_results: >-
+      {{
+        health_check_results
+        | combine(
+            {
+              'services': health_check_results.services
+              | combine(
+                  {
+                    'first_boot_configured':
+                    eveng_healthcheck_first_boot_marker.stat.exists | default(false)
+                  }
+                )
+            }
+          )
+      }}
+  tags:
+    - health_services
+    - eveng_wizard
 
 - name: Service health summary
   ansible.builtin.debug:
     msg:
       - "Apache: {{ 'OK' if health_check_results.services.apache.running else 'FAILED' }}"
       - "Database: {{ 'OK' if health_check_results.services.database.running else 'FAILED' }}"
+      - "guacd: {{ 'OK' if health_check_results.services.guacd.running else 'FAILED' }}"
+      - "Tomcat: {{ 'OK' if health_check_results.services.tomcat.running else 'FAILED' }}"
+      - >-
+        First boot: {{
+          'CONFIGURED'
+          if health_check_results.services.first_boot_configured
+          else 'INCOMPLETE'
+        }}
   when: health_check_report_format == 'detailed'
   tags:
     - health_services

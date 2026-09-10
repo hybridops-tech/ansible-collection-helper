@@ -14,6 +14,9 @@
 - name: Check remote path
   ansible.builtin.stat:
     path: "{{ eveng_images_remote_path }}"
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
   delegate_to: "{{ eveng_images_remote_host }}"
   register: eveng_images_remote_path_stat
 

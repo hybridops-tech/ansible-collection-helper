@@ -29,10 +29,161 @@
     msg: "No archives or images found to install in {{ eveng_images_cache_dir }}"
   when: (eveng_images_install_files.files | default([]) | length) == 0
 
-- name: Detect type for each file
+- name: Inspect image installation manifest
+  ansible.builtin.stat:
+    path: "{{ eveng_images_install_manifest_path }}"
+  register: eveng_images_install_manifest_stat
+
+- name: Read image installation manifest
+  ansible.builtin.slurp:
+    path: "{{ eveng_images_install_manifest_path }}"
+  register: eveng_images_install_manifest_content
+  when: eveng_images_install_manifest_stat.stat.isreg | default(false)
+
+- name: Resolve image installation manifest
+  ansible.builtin.set_fact:
+    eveng_images_install_manifest: >-
+      {{
+        (eveng_images_install_manifest_content.content | b64decode | from_json)
+        if eveng_images_install_manifest_stat.stat.isreg | default(false)
+        else {'schema_version': 1, 'images': {}}
+      }}
+  changed_when: false
+
+- name: Validate image installation manifest
+  ansible.builtin.assert:
+    that:
+      - eveng_images_install_manifest is mapping
+      - eveng_images_install_manifest.schema_version | default(0) == 1
+      - eveng_images_install_manifest.images | default({}) is mapping
+    fail_msg: >-
+      Invalid EVE-NG image installation manifest:
+      {{ eveng_images_install_manifest_path }}
+
+- name: Initialise image detection inputs
+  ansible.builtin.set_fact:
+    eveng_images_detection_inputs: []
+  changed_when: false
+
+- name: Build image detection inputs
+  ansible.builtin.set_fact:
+    eveng_images_detection_inputs: >-
+      {{
+        eveng_images_detection_inputs
+        + [{
+          'file': item,
+          'key': item.path | regex_replace(
+            '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
+            ''
+          ),
+          'installed_path': (
+            eveng_images_install_manifest.images
+            | default({})
+          ).get(
+            item.path | regex_replace(
+              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
+              ''
+            ),
+            {}
+          ).get('installed_path', ''),
+          'recorded_type': (
+            eveng_images_install_manifest.images
+            | default({})
+          ).get(
+            item.path | regex_replace(
+              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
+              ''
+            ),
+            {}
+          ).get('type', ''),
+          'recorded_sha256': (
+            eveng_images_install_manifest.images
+            | default({})
+          ).get(
+            item.path | regex_replace(
+              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
+              ''
+            ),
+            {}
+          ).get('sha256', ''),
+          'recorded_size': (
+            eveng_images_install_manifest.images
+            | default({})
+          ).get(
+            item.path | regex_replace(
+              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
+              ''
+            ),
+            {}
+          ).get('size', -1),
+          'recorded_mtime': (
+            eveng_images_install_manifest.images
+            | default({})
+          ).get(
+            item.path | regex_replace(
+              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
+              ''
+            ),
+            {}
+          ).get('mtime', '') | string
+        }]
+      }}
+  loop: "{{ eveng_images_install_files.files | default([]) }}"
+  loop_control:
+    label: "{{ item.path | basename }}"
+  changed_when: false
+
+- name: Inspect reusable installed images
+  ansible.builtin.stat:
+    path: "{{ item.installed_path }}"
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
+  loop: "{{ eveng_images_detection_inputs }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: eveng_images_detection_reuse_checks
+  when:
+    - item.installed_path | length > 0
+    - item.recorded_type is match('^(structured:)?(qemu|iol|dynamips)$|^raw:(qemu|iol)$')
+    - item.recorded_sha256 is match('^[0-9a-f]{64}$')
+    - item.recorded_size | int == item.file.size | int
+    - item.recorded_mtime == (item.file.mtime | string)
+
+- name: Initialise image detection plan
+  ansible.builtin.set_fact:
+    eveng_images_reusable_detection_inputs: []
+    eveng_images_pending_detection_inputs: []
+  changed_when: false
+
+- name: Select reusable image metadata
+  ansible.builtin.set_fact:
+    eveng_images_reusable_detection_inputs: >-
+      {{ eveng_images_reusable_detection_inputs + [item.item] }}
+  loop: "{{ eveng_images_detection_reuse_checks.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when:
+    - not (item.skipped | default(false))
+    - item.stat.exists | default(false)
+  changed_when: false
+
+- name: Select images requiring type detection
+  ansible.builtin.set_fact:
+    eveng_images_pending_detection_inputs: >-
+      {{ eveng_images_pending_detection_inputs + [item.item] }}
+  loop: "{{ eveng_images_detection_reuse_checks.results | default([]) }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: >-
+    item.skipped | default(false)
+    or not (item.stat.exists | default(false))
+  changed_when: false
+
+- name: Detect type for new or changed files
   ansible.builtin.shell: |
     set -euo pipefail
-    ARCHIVE="{{ item.path }}"
+    ARCHIVE="$HYOPS_IMAGE_ARCHIVE"
     BASENAME="$(basename "$ARCHIVE")"
     EXT="${BASENAME##*.}"
     MIME_TYPE="$(file --brief --mime-type "$ARCHIVE" 2>/dev/null || true)"
@@ -132,9 +283,11 @@
     echo "qemu"
   args:
     executable: /bin/bash
-  loop: "{{ eveng_images_install_files.files | default([]) }}"
+  environment:
+    HYOPS_IMAGE_ARCHIVE: "{{ item.file.path }}"
+  loop: "{{ eveng_images_pending_detection_inputs }}"
   loop_control:
-    label: "{{ item.path | basename }}"
+    label: "{{ item.key }}"
   register: eveng_images_detected_types
   changed_when: false
 
@@ -143,120 +296,62 @@
     that:
       - not (item.stdout | trim).startswith('invalid')
     fail_msg: >-
-      Invalid image file: {{ item.item.path }}
+      Invalid image file: {{ item.item.file.path }}
       ({{ item.stdout | trim }}).
   loop: "{{ eveng_images_detected_types.results | default([]) }}"
   loop_control:
-    label: "{{ item.item.path | basename }}"
-
-- name: Inspect image installation manifest
-  ansible.builtin.stat:
-    path: "{{ eveng_images_install_manifest_path }}"
-  register: eveng_images_install_manifest_stat
-
-- name: Read image installation manifest
-  ansible.builtin.slurp:
-    path: "{{ eveng_images_install_manifest_path }}"
-  register: eveng_images_install_manifest_content
-  when: eveng_images_install_manifest_stat.stat.isreg | default(false)
-
-- name: Resolve image installation manifest
-  ansible.builtin.set_fact:
-    eveng_images_install_manifest: >-
-      {{
-        (eveng_images_install_manifest_content.content | b64decode | from_json)
-        if eveng_images_install_manifest_stat.stat.isreg | default(false)
-        else {'schema_version': 1, 'images': {}}
-      }}
-  changed_when: false
-
-- name: Validate image installation manifest
-  ansible.builtin.assert:
-    that:
-      - eveng_images_install_manifest is mapping
-      - eveng_images_install_manifest.schema_version | default(0) == 1
-      - eveng_images_install_manifest.images | default({}) is mapping
-    fail_msg: >-
-      Invalid EVE-NG image installation manifest:
-      {{ eveng_images_install_manifest_path }}
+    label: "{{ item.item.key }}"
 
 - name: Initialise image installation candidates
   ansible.builtin.set_fact:
     eveng_images_install_candidates: []
   changed_when: false
 
-- name: Build image installation candidates
+- name: Build reusable image installation candidates
+  ansible.builtin.set_fact:
+    eveng_images_install_candidates: >-
+      {{
+        eveng_images_install_candidates
+        + [{
+          'detection': {'stdout': item.recorded_type},
+          'file': item.file,
+          'key': item.key,
+          'size': item.file.size,
+          'mtime': item.file.mtime | string,
+          'installed_path': item.installed_path,
+          'reuse_type': item.recorded_type,
+          'recorded_sha256': item.recorded_sha256,
+          'recorded_size': item.recorded_size,
+          'recorded_mtime': item.recorded_mtime
+        }]
+      }}
+  loop: "{{ eveng_images_reusable_detection_inputs }}"
+  loop_control:
+    label: "{{ item.key }}"
+  changed_when: false
+
+- name: Build new or changed image installation candidates
   ansible.builtin.set_fact:
     eveng_images_install_candidates: >-
       {{
         (eveng_images_install_candidates | default([]))
         + [{
           'detection': item,
-          'key': item.item.path | regex_replace(
-            '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
-            ''
-          ),
-          'size': item.item.size,
-          'mtime': item.item.mtime | string,
-          'installed_path': (
-            eveng_images_install_manifest.images
-            | default({})
-          ).get(
-            item.item.path | regex_replace(
-              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
-              ''
-            ),
-            {}
-          ).get('installed_path', ''),
-          'recorded_sha256': (
-            eveng_images_install_manifest.images
-            | default({})
-          ).get(
-            item.item.path | regex_replace(
-              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
-              ''
-            ),
-            {}
-          ).get('sha256', ''),
-          'recorded_size': (
-            eveng_images_install_manifest.images
-            | default({})
-          ).get(
-            item.item.path | regex_replace(
-              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
-              ''
-            ),
-            {}
-          ).get('size', -1),
-          'recorded_mtime': (
-            eveng_images_install_manifest.images
-            | default({})
-          ).get(
-            item.item.path | regex_replace(
-              '^' ~ (eveng_images_cache_dir | regex_escape) ~ '/?',
-              ''
-            ),
-            {}
-          ).get('mtime', '') | string
+          'file': item.item.file,
+          'key': item.item.key,
+          'size': item.item.file.size,
+          'mtime': item.item.file.mtime | string,
+          'installed_path': item.item.installed_path,
+          'reuse_type': '',
+          'recorded_sha256': item.item.recorded_sha256,
+          'recorded_size': item.item.recorded_size,
+          'recorded_mtime': item.item.recorded_mtime
         }]
       }}
   loop: "{{ eveng_images_detected_types.results | default([]) }}"
   loop_control:
-    label: "{{ item.item.path | basename }}"
+    label: "{{ item.item.key }}"
   changed_when: false
-
-- name: Inspect unchanged installed images
-  ansible.builtin.stat:
-    path: "{{ item.installed_path }}"
-  loop: "{{ eveng_images_install_candidates | default([]) }}"
-  loop_control:
-    label: "{{ item.key }}"
-  register: eveng_images_reuse_checks
-  when:
-    - item.installed_path | length > 0
-    - item.recorded_sha256 is match('^[0-9a-f]{64}$')
-    - item.recorded_size | int == item.size | int
-    - item.recorded_mtime == item.mtime
 
 - name: Initialise image installation plan
   ansible.builtin.set_fact:
@@ -270,39 +365,35 @@
 - name: Reuse verified installed images
   ansible.builtin.set_fact:
     eveng_images_installed_paths: >-
-      {{ eveng_images_installed_paths + [item.item.installed_path] }}
+      {{ eveng_images_installed_paths + [item.installed_path] }}
     eveng_images_installed_types: >-
       {{
         eveng_images_installed_types
         + [
-          item.item.detection.stdout
+          item.detection.stdout
           | trim
           | regex_replace('^(structured:|raw:)', '')
         ]
       }}
-  loop: "{{ eveng_images_reuse_checks.results | default([]) }}"
+  loop: "{{ eveng_images_install_candidates | default([]) }}"
   loop_control:
-    label: "{{ item.item.key }}"
-  when:
-    - not (item.skipped | default(false))
-    - item.stat.exists | default(false)
+    label: "{{ item.key }}"
+  when: item.reuse_type | length > 0
   changed_when: false
 
 - name: Select images requiring installation
   ansible.builtin.set_fact:
     eveng_images_pending_installations: >-
-      {{ eveng_images_pending_installations + [item.item] }}
-  loop: "{{ eveng_images_reuse_checks.results | default([]) }}"
+      {{ eveng_images_pending_installations + [item] }}
+  loop: "{{ eveng_images_install_candidates | default([]) }}"
   loop_control:
-    label: "{{ item.item.key }}"
-  when: >-
-    item.skipped | default(false)
-    or not (item.stat.exists | default(false))
+    label: "{{ item.key }}"
+  when: item.reuse_type | length == 0
   changed_when: false
 
 - name: Calculate new or changed image checksums
   ansible.builtin.stat:
-    path: "{{ item.detection.item.path }}"
+    path: "{{ item.file.path }}"
     checksum_algorithm: sha256
   loop: "{{ eveng_images_pending_installations }}"
   loop_control:
@@ -392,6 +483,9 @@
 - name: Verify every image produced installed content
   ansible.builtin.stat:
     path: "{{ item }}"
+    get_checksum: false
+    get_mime: false
+    get_attributes: false
   loop: "{{ eveng_images_installed_paths | default([]) }}"
   register: eveng_images_installed_path_stats
 
@@ -409,10 +503,10 @@
     that:
       - >-
         (eveng_images_installed_paths | default([]) | length)
-        == (eveng_images_detected_types.results | default([]) | length)
+        == (eveng_images_install_files.files | default([]) | length)
     fail_msg: >-
       Installed {{ eveng_images_installed_paths | default([]) | length }} of
-      {{ eveng_images_detected_types.results | default([]) | length }} requested image archives.
+      {{ eveng_images_install_files.files | default([]) | length }} requested image archives.
 
 - name: Discover installed IOL binaries
   ansible.builtin.find:
@@ -481,7 +575,7 @@
 - name: Publish verified image installation state
   ansible.builtin.set_fact:
     eveng_images_requested_count: >-
-      {{ eveng_images_detected_types.results | default([]) | length }}
+      {{ eveng_images_install_files.files | default([]) | length }}
     eveng_images_installed_count: "{{ eveng_images_installed_paths | default([]) | length }}"
     eveng_images_installed_names: >-
       {{

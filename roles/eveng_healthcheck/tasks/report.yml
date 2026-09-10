@@ -2,7 +2,7 @@
 # purpose: Generate EVE-NG healthcheck summary, persist optional reports, and fail on unhealthy runs.
 # maintainer: HybridOps.Tech
 
-- name: Set report rendering shortcuts
+- name: Set report rendering shortcuts  # noqa var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     _svc: "{{ health_check_results.services | default({}) }}"
     _svc_ports: "{{ (health_check_results.services | default({})).ports | default({}) }}"
@@ -17,13 +17,18 @@
   changed_when: false
   run_once: true
 
-- name: Calculate overall health status
+- name: Calculate overall health status  # noqa var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     overall_health: >-
       {{
         (
           (_svc.apache.running | default(false))
           and (_svc.database.running | default(false))
+          and (_svc.guacd.running | default(false))
+          and (_svc.tomcat.running | default(false))
+          and (_svc_ports.guacd | default(false))
+          and (_svc_ports.tomcat | default(false))
+          and (_svc.first_boot_configured | default(false))
           and (_db.status | default('fail') == 'pass')
           and (_api.status | default('fail') == 'pass')
           and ((_virt.status | default('none')) in ['full', 'partial'])
@@ -32,7 +37,7 @@
       }}
   changed_when: false
 
-- name: Update overall status
+- name: Update overall status  # noqa var-naming[no-role-prefix]
   ansible.builtin.set_fact:
     health_check_results: >-
       {{
@@ -82,10 +87,21 @@
           else 'Stopped'
         }}
       - >-
-        Ports: {{
-          'OK'
-          if (_svc_ports.apache | default(false))
-          else 'FAIL'
+        Guacamole: {{
+          'Running'
+          if (
+            (_svc.guacd.running | default(false))
+            and (_svc.tomcat.running | default(false))
+            and (_svc_ports.guacd | default(false))
+            and (_svc_ports.tomcat | default(false))
+          )
+          else 'Failed'
+        }}
+      - >-
+        First Boot: {{
+          'Configured'
+          if (_svc.first_boot_configured | default(false))
+          else 'Incomplete'
         }}
       - ""
       - "Database:"
@@ -212,14 +228,44 @@
       }}
       ({{ 'Enabled' if (_svc.database.enabled | default(false)) else 'Disabled' }})
 
+      guacd: {{
+        'Running'
+        if (_svc.guacd.running | default(false))
+        else 'Stopped'
+      }}
+      ({{ 'Enabled' if (_svc.guacd.enabled | default(false)) else 'Disabled' }})
+
+      Tomcat: {{
+        'Running'
+        if (_svc.tomcat.running | default(false))
+        else 'Stopped'
+      }}
+      ({{ 'Enabled' if (_svc.tomcat.enabled | default(false)) else 'Disabled' }})
+
+      First Boot: {{
+        'Configured'
+        if (_svc.first_boot_configured | default(false))
+        else 'Incomplete'
+      }}
+
       Port 80: {{
         'Open'
         if (_svc_ports.apache | default(false))
         else 'Closed'
       }}
-      Port 443: {{
+      Port 3306: {{
         'Open'
         if (_svc_ports.mysql | default(false))
+        else 'Closed'
+      }}
+      Port 4822: {{
+        'Open'
+        if (_svc_ports.guacd | default(false))
+        else 'Closed'
+      }}
+      Port 8080: {{
+        'Open'
+        if (_svc_ports.tomcat | default(false))
         else 'Closed'
       }}
 

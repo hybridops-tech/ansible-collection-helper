@@ -43,16 +43,27 @@
         eveng_lab_archive_config_export.status | default(0) != 200
         or eveng_lab_archive_config_export.json.status | default('') != 'success'
 
-    - name: Verify exported IOL configurations
+    - name: Recover and verify exported IOL configurations
       ansible.builtin.script:
         cmd: >-
           {{ role_path }}/files/verify_iol_export.py
           --lab {{ eveng_lab_archive_config_lab | quote }}
           --node-state-root {{ eveng_lab_archive_node_state_root | quote }}
+          --recover
+          --api-base-url {{ eveng_lab_archive_api_base_url | quote }}
+          --api-lab {{ eveng_lab_archive_config_relative_lab | quote }}
+          --iou-export {{ eveng_lab_archive_iou_export | quote }}
+          --timeout {{ eveng_lab_archive_config_export_timeout_s | int }}
+          --validate-certs {{ 'true' if eveng_lab_archive_api_validate_certs else 'false' }}
         executable: python3
+      environment:
+        HYOPS_EVE_API_COOKIE: "{{ eveng_lab_archive_api_login.cookies_string }}"
       register: eveng_lab_archive_config_verify
-      changed_when: false
+      changed_when: >-
+        eveng_lab_archive_config_verify.rc == 0
+        and 'recovered=0' not in eveng_lab_archive_config_verify.stdout
       failed_when: false
+      no_log: true
 
     - name: Require exported IOL configurations
       ansible.builtin.assert:

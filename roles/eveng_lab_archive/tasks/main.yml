@@ -71,6 +71,7 @@
       - eveng_lab_archive_api_base_url is match('^https?://')
       - eveng_lab_archive_api_username | string | trim | length > 0
       - eveng_lab_archive_api_password_env | string | trim | length > 0
+      - eveng_lab_archive_iou_export is match('^/')
     fail_msg: "EVE-NG lab archive settings are invalid"
 
 - name: Require one EVE-NG guest quiescence method

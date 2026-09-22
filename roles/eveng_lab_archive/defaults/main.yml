@@ -40,3 +40,4 @@ eveng_lab_archive_api_base_url: http://127.0.0.1
 eveng_lab_archive_api_username: admin
 eveng_lab_archive_api_password_env: EVENG_ADMIN_PASSWORD
 eveng_lab_archive_api_validate_certs: false
+eveng_lab_archive_iou_export: /opt/unetlab/scripts/iou_export

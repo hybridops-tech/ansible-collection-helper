@@ -25,12 +25,12 @@ eveng_lab_archive_api_password_env: EVENG_ADMIN_PASSWORD
 eveng_lab_archive_config_export_timeout_s: 300
 ```
 
-The role uses EVE-NG's local API. After export, it requires an embedded
-configuration for each IOL node with retained NVRAM. A missing configuration
-stops preservation before the execution host is released. The native export
-timeout accepts values from 1 to 3600 seconds. Intended device changes must
-be saved to startup configuration before capture. Leave IOL nodes running for
-native export; guest quiescence follows configuration capture.
+The role uses EVE-NG's local API. If native export omits a stopped IOL node,
+the role reads its saved NVRAM and writes the startup configuration through
+that API. It then requires an embedded configuration for every IOL node with
+runtime state; otherwise preservation stops. Save intended device changes to
+startup configuration before capture. The export timeout accepts values from
+1 to 3600 seconds.
 
 Each export is staged and verified before it replaces the current archive. The
 previous verified generation is retained with a `.previous` suffix, including

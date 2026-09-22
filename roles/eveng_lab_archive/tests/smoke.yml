@@ -17,6 +17,7 @@
     test_quiescence_marker: /tmp/hyops-eveng-quiesced
     test_quiescence_archive: /tmp/hyops-eveng-quiescence-output/labs.tar.gz
     test_api_port: 18765
+    eveng_lab_archive_iou_export: /bin/false
     eveng_lab_archive_tenant_uid_base: "{{ lookup('pipe', 'id -u') | int }}"
     eveng_lab_archive_tenant_gid: "{{ lookup('pipe', 'id -g') }}"
   tasks:

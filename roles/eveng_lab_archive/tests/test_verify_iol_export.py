@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import base64
 import importlib.util
+import io
+import json
 from pathlib import Path
+import subprocess
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import MagicMock, patch
 from xml.etree import ElementTree
 
 
@@ -68,6 +72,10 @@ class VerifyIolExportTests(unittest.TestCase):
         self.write_lab(3, 2, set())
         self.assertEqual(MODULE.verify(self.lab, self.state), (0, 3))
 
+    def test_lab_without_iol_does_not_require_a_lab_id(self) -> None:
+        self.lab.write_text('<lab name="routing"/>')
+        self.assertEqual(MODULE.verify(self.lab, self.state), (0, 0))
+
     def test_empty_nvram_is_not_accepted(self) -> None:
         self.write_lab(1, 0, {1})
         self.write_nvram(1)
@@ -83,6 +91,110 @@ class VerifyIolExportTests(unittest.TestCase):
         tree.write(self.lab)
         with self.assertRaisesRegex(ValueError, "IOL-1 \\(id 1\\)"):
             MODULE.verify(self.lab, self.state)
+
+    def test_started_node_without_nvram_fails(self) -> None:
+        self.write_lab(1, 0, set())
+        (self.state / "0" / LAB_ID / "1").mkdir(parents=True)
+        with self.assertRaisesRegex(ValueError, "NVRAM missing"):
+            MODULE.verify(self.lab, self.state)
+
+    def test_stopped_iol_config_is_sent_through_eve_api(self) -> None:
+        self.write_lab(1, 0, set())
+        self.write_nvram(1)
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = io.BytesIO(
+            b'{"code":201,"status":"success"}'
+        )
+        export = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=b"hostname IOL-1\n", stderr=b""
+        )
+        with patch.object(MODULE, "build_opener", return_value=opener), patch.object(
+            MODULE.subprocess, "run", return_value=export
+        ) as run:
+            recovered = MODULE.recover(
+                self.lab,
+                self.state,
+                api_base_url="http://127.0.0.1",
+                api_lab="student/routing lab.unl",
+                cookie="PHPSESSID=test",
+                iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                timeout=30,
+                validate_certs=True,
+            )
+
+        self.assertEqual(recovered, 1)
+        self.assertEqual(run.call_args.args[0][-1], "/dev/stdout")
+        request = opener.open.call_args.args[0]
+        self.assertEqual(request.get_method(), "PUT")
+        self.assertEqual(
+            request.full_url,
+            "http://127.0.0.1/api/labs/student/routing%20lab.unl/configs/1",
+        )
+        self.assertEqual(json.loads(request.data), {"data": "hostname IOL-1\n"})
+
+    def test_recovery_does_not_replace_existing_config(self) -> None:
+        self.write_lab(1, 0, {1})
+        self.write_nvram(1)
+        with patch.object(MODULE.subprocess, "run") as run:
+            recovered = MODULE.recover(
+                self.lab,
+                self.state,
+                api_base_url="http://127.0.0.1",
+                api_lab="lab.unl",
+                cookie="PHPSESSID=test",
+                iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                timeout=30,
+                validate_certs=True,
+            )
+        self.assertEqual(recovered, 0)
+        run.assert_not_called()
+
+    def test_recovery_fails_when_saved_nvram_cannot_be_exported(self) -> None:
+        self.write_lab(1, 0, set())
+        self.write_nvram(1)
+        export = subprocess.CompletedProcess(
+            args=[], returncode=1, stdout=b"", stderr=b"invalid NVRAM"
+        )
+        with patch.object(MODULE.subprocess, "run", return_value=export), patch.object(
+            MODULE, "build_opener"
+        ) as opener:
+            with self.assertRaisesRegex(ValueError, "saved NVRAM could not be exported"):
+                MODULE.recover(
+                    self.lab,
+                    self.state,
+                    api_base_url="http://127.0.0.1",
+                    api_lab="lab.unl",
+                    cookie="PHPSESSID=test",
+                    iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                    timeout=30,
+                    validate_certs=True,
+                )
+        opener.return_value.open.assert_not_called()
+
+    def test_recovery_fails_when_eve_rejects_config(self) -> None:
+        self.write_lab(1, 0, set())
+        self.write_nvram(1)
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = io.BytesIO(
+            b'{"status":"fail","message":"update failed"}'
+        )
+        export = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=b"hostname IOL-1\n", stderr=b""
+        )
+        with patch.object(MODULE, "build_opener", return_value=opener), patch.object(
+            MODULE.subprocess, "run", return_value=export
+        ):
+            with self.assertRaisesRegex(ValueError, "EVE-NG config API rejected"):
+                MODULE.recover(
+                    self.lab,
+                    self.state,
+                    api_base_url="http://127.0.0.1",
+                    api_lab="lab.unl",
+                    cookie="PHPSESSID=test",
+                    iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                    timeout=30,
+                    validate_certs=True,
+                )
 
 
 if __name__ == "__main__":

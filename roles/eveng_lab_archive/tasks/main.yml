@@ -139,17 +139,17 @@
     fail_msg: "EVE-NG lab archive folders must be safe relative paths"
   loop: "{{ eveng_lab_archive_folders }}"
 
-- name: Quiesce EVE-NG guests
-  ansible.builtin.include_tasks: quiesce.yml
-  when:
-    - eveng_lab_archive_action == 'export'
-    - eveng_lab_archive_include_node_state | bool
-
 - name: Capture saved EVE-NG device configurations
   ansible.builtin.include_tasks: capture-device-configs.yml
   when:
     - eveng_lab_archive_action == 'export'
     - eveng_lab_archive_capture_device_configs | bool
+
+- name: Quiesce EVE-NG guests
+  ansible.builtin.include_tasks: quiesce.yml
+  when:
+    - eveng_lab_archive_action == 'export'
+    - eveng_lab_archive_include_node_state | bool
 
 - name: Initialise saved-configuration result
   ansible.builtin.set_fact:

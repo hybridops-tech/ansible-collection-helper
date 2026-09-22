@@ -43,6 +43,24 @@
         eveng_lab_archive_config_export.status | default(0) != 200
         or eveng_lab_archive_config_export.json.status | default('') != 'success'
 
+    - name: Verify exported IOL configurations
+      ansible.builtin.script:
+        cmd: >-
+          {{ role_path }}/files/verify_iol_export.py
+          --lab {{ eveng_lab_archive_config_lab | quote }}
+          --node-state-root {{ eveng_lab_archive_node_state_root | quote }}
+        executable: python3
+      register: eveng_lab_archive_config_verify
+      changed_when: false
+      failed_when: false
+
+    - name: Require exported IOL configurations
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_config_verify.rc == 0
+        fail_msg: >-
+          {{ eveng_lab_archive_config_verify.stderr | default('') | trim }}
+
     - name: Record captured EVE-NG lab
       ansible.builtin.set_fact:
         eveng_lab_archive_captured_labs: >-
@@ -56,10 +74,15 @@
         msg: >-
           EVE-NG saved-configuration capture failed for
           {{ eveng_lab_archive_config_relative_lab }}.
-          timeout={{ eveng_lab_archive_config_export_timeout_s }}s;
-          API status={{ eveng_lab_archive_config_export.status | default('unknown') }};
-          message={{
-            eveng_lab_archive_config_export.json.message
-            | default(eveng_lab_archive_config_export.msg)
-            | default('no response from EVE-NG')
+          {{
+            eveng_lab_archive_config_verify.stderr | trim
+            if eveng_lab_archive_config_verify is defined
+              and eveng_lab_archive_config_verify.rc | default(0) != 0
+            else 'timeout=' ~ eveng_lab_archive_config_export_timeout_s ~ 's; '
+              ~ 'API status=' ~ (eveng_lab_archive_config_export.status | default('unknown')) ~ '; '
+              ~ 'message=' ~ (
+                eveng_lab_archive_config_export.json.message
+                | default(eveng_lab_archive_config_export.msg)
+                | default('no response from EVE-NG')
+              )
           }}

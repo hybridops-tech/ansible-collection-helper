@@ -50,7 +50,8 @@
             dest: "{{ test_root }}/student/routing lab.unl"
             mode: "0664"
             content: >-
-              <lab name="routing"><topology><nodes><node id="1" name="R1"
+              <lab id="11111111-1111-4111-8111-111111111111" name="routing">
+              <topology><nodes><node id="1" name="R1" type="iol"
               config="0"/></nodes></topology></lab>
         - name: Start mock EVE-NG API
           ansible.builtin.shell: >-
@@ -72,6 +73,18 @@
             path: "{{ test_node_state_root }}/0/test-lab/1"
             state: directory
             mode: "0755"
+        - name: Create test IOL node-state directory
+          ansible.builtin.file:
+            path: >-
+              {{ test_node_state_root }}/0/11111111-1111-4111-8111-111111111111/1
+            state: directory
+            mode: "0755"
+        - name: Create test IOL NVRAM
+          ansible.builtin.copy:
+            dest: >-
+              {{ test_node_state_root }}/0/11111111-1111-4111-8111-111111111111/1/nvram_00016
+            content: "saved IOL state\n"
+            mode: "0644"
         - name: Create test QEMU overlay
           ansible.builtin.command:
             argv:
@@ -299,6 +312,72 @@
           - eveng_lab_archive_capture_failure_observed | default(false)
           - >-
             eveng_lab_archive_retained_archive.stat.checksum
+            == eveng_lab_archive_current_test_checksum
+
+    - name: Add an IOL node whose native export will be omitted
+      ansible.builtin.copy:
+        dest: "{{ test_root }}/student/routing lab.unl"
+        mode: "0664"
+        content: >-
+          <lab id="11111111-1111-4111-8111-111111111111" name="routing">
+          <topology><nodes><node id="1" name="R1" type="iol" config="1"/>
+          <node id="2" name="R2" type="iol" config="0"/></nodes></topology>
+          <objects><configs><config id="1">aG9zdG5hbWUgUjEK</config></configs></objects>
+          </lab>
+
+    - name: Create omitted IOL node state
+      ansible.builtin.file:
+        path: >-
+          {{ test_node_state_root }}/0/11111111-1111-4111-8111-111111111111/2
+        state: directory
+        mode: "0755"
+
+    - name: Create omitted IOL NVRAM
+      ansible.builtin.copy:
+        dest: >-
+          {{ test_node_state_root }}/0/11111111-1111-4111-8111-111111111111/2/nvram_00032
+        content: "saved IOL state\n"
+        mode: "0644"
+
+    - name: Reject successful API export with missing IOL configuration
+      block:
+        - name: Attempt export with an omitted IOL configuration
+          ansible.builtin.include_role:
+            name: hybridops.helper.eveng_lab_archive
+          vars:
+            eveng_lab_archive_action: export
+            eveng_lab_archive_labs_root: "{{ test_root }}"
+            eveng_lab_archive_path: "{{ test_archive }}"
+            eveng_lab_archive_remote_dir: "{{ test_root }}-staging"
+            eveng_lab_archive_owner: "{{ lookup('env', 'USER') }}"
+            eveng_lab_archive_group: "{{ lookup('pipe', 'id -gn') }}"
+            eveng_lab_archive_node_state_root: "{{ test_node_state_root }}"
+            eveng_lab_archive_capture_device_configs: true
+            eveng_lab_archive_api_base_url: "http://127.0.0.1:{{ test_api_port }}"
+            eveng_lab_archive_api_password_env: USER
+        - name: Reject unexpected IOL capture success
+          ansible.builtin.fail:
+            msg: "missing IOL configuration was accepted"
+      rescue:
+        - name: Record expected IOL capture rejection
+          ansible.builtin.set_fact:
+            eveng_lab_archive_iol_capture_rejected: true
+            eveng_lab_archive_iol_capture_message: >-
+              {{ ansible_failed_result.msg | default('') }}
+
+    - name: Inspect archive after rejected IOL capture
+      ansible.builtin.stat:
+        path: "{{ test_archive }}"
+        checksum_algorithm: sha256
+      register: eveng_lab_archive_after_iol_rejection
+
+    - name: Require retained archive after IOL capture rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_iol_capture_rejected | default(false)
+          - "'R2 (id 2)' in eveng_lab_archive_iol_capture_message"
+          - >-
+            eveng_lab_archive_after_iol_rejection.stat.checksum
             == eveng_lab_archive_current_test_checksum
 
     - name: Reject EVE-NG restore without sufficient disk space

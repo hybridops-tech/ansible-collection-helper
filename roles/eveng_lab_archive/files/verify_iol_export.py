@@ -57,17 +57,24 @@ def _node_state(node_state_root: Path, lab_id: str, node_id: str):
     return directories, nvram_files
 
 
-def _valid_config(config) -> bool:
+def _config_bytes(config) -> bytes | None:
     try:
         encoded = "".join((config.text or "").split()) if config is not None else ""
         content = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error):
-        return False
-    return bool(content.strip())
+        return None
+    return content if content.strip() else None
 
 
-def verify(lab: Path, node_state_root: Path) -> tuple[int, int]:
+def _valid_config(config) -> bool:
+    return _config_bytes(config) is not None
+
+
+def verify(
+    lab: Path, node_state_root: Path, unconfigured_ids: set[str] | None = None
+) -> tuple[int, int]:
     lab_id, nodes, configs = _lab_state(lab)
+    unconfigured_ids = unconfigured_ids or set()
     missing = []
     expected = 0
 
@@ -75,6 +82,8 @@ def verify(lab: Path, node_state_root: Path) -> tuple[int, int]:
         node_id = node.attrib["id"]
         directories, nvram_files = _node_state(node_state_root, lab_id, node_id)
         if not directories:
+            continue
+        if node_id in unconfigured_ids:
             continue
         expected += 1
         label = f"{node.get('name', node_id)} (id {node_id})"
@@ -102,7 +111,7 @@ def recover(
     iou_export: Path,
     timeout: int,
     validate_certs: bool,
-) -> int:
+) -> tuple[int, set[str]]:
     if not cookie:
         raise ValueError("EVE-NG API session is unavailable")
     if not api_lab or api_lab.startswith("/") or ".." in Path(api_lab).parts:
@@ -115,11 +124,12 @@ def recover(
     opener = build_opener(ProxyHandler({}), HTTPSHandler(context=context))
     lab_id, nodes, configs = _lab_state(lab)
     recovered = 0
+    unconfigured_ids = set()
 
     for node in nodes:
         node_id = node.attrib["id"]
         directories, nvram_files = _node_state(node_state_root, lab_id, node_id)
-        if not directories or _valid_config(configs.get(node_id)):
+        if not directories:
             continue
         label = f"{node.get('name', node_id)} (id {node_id})"
         if len(nvram_files) != 1 or nvram_files[0].stat().st_size == 0:
@@ -131,12 +141,23 @@ def recover(
             timeout=timeout,
             check=False,
         )
+        if (
+            result.returncode == 3
+            and not result.stdout.strip()
+            and b"no startup config" in result.stderr.lower()
+        ):
+            if not _valid_config(configs.get(node_id)):
+                unconfigured_ids.add(node_id)
+            continue
         if result.returncode != 0 or not result.stdout.strip():
             raise ValueError(f"{label}: saved NVRAM could not be exported")
         try:
             config = result.stdout.decode("utf-8")
         except UnicodeDecodeError as exc:
             raise ValueError(f"{label}: exported configuration is not UTF-8") from exc
+
+        if _config_bytes(configs.get(node_id)) == result.stdout:
+            continue
 
         url = (
             api_base_url.rstrip("/")
@@ -158,9 +179,12 @@ def recover(
             raise ValueError(f"{label}: EVE-NG config API update failed") from exc
         if not isinstance(payload, dict) or payload.get("status") != "success":
             raise ValueError(f"{label}: EVE-NG config API rejected the update")
+        _, _, updated_configs = _lab_state(lab)
+        if _config_bytes(updated_configs.get(node_id)) != result.stdout:
+            raise ValueError(f"{label}: EVE-NG config API update was not persisted")
         recovered += 1
 
-    return recovered
+    return recovered, unconfigured_ids
 
 
 def main() -> int:
@@ -176,8 +200,9 @@ def main() -> int:
     args = parser.parse_args()
     try:
         recovered = 0
+        unconfigured_ids = set()
         if args.recover:
-            recovered = recover(
+            recovered, unconfigured_ids = recover(
                 args.lab,
                 args.node_state_root,
                 api_base_url=args.api_base_url,
@@ -187,7 +212,7 @@ def main() -> int:
                 timeout=args.timeout,
                 validate_certs=args.validate_certs == "true",
             )
-        expected, total = verify(args.lab, args.node_state_root)
+        expected, total = verify(args.lab, args.node_state_root, unconfigured_ids)
     except (
         OSError,
         KeyError,
@@ -197,7 +222,11 @@ def main() -> int:
     ) as exc:
         print(f"EVE-NG IOL export verification failed: {exc}", file=sys.stderr)
         return 1
-    print(f"IOL configurations verified: {expected} with NVRAM, {total} nodes; recovered={recovered}")
+    print(
+        f"IOL configurations verified: {expected} with archived configurations, "
+        f"{total} nodes; recovered={recovered}; "
+        f"unconfigured={len(unconfigured_ids)}"
+    )
     return 0
 
 

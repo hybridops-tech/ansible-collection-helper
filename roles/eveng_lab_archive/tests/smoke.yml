@@ -16,8 +16,9 @@
     test_quiescence_script: /tmp/hyops-eveng-quiesce.sh
     test_quiescence_marker: /tmp/hyops-eveng-quiesced
     test_quiescence_archive: /tmp/hyops-eveng-quiescence-output/labs.tar.gz
+    test_iou_export: /tmp/hyops-eveng-iou-export
     test_api_port: 18765
-    eveng_lab_archive_iou_export: /bin/false
+    eveng_lab_archive_iou_export: "{{ test_iou_export }}"
     eveng_lab_archive_tenant_uid_base: "{{ lookup('pipe', 'id -u') | int }}"
     eveng_lab_archive_tenant_gid: "{{ lookup('pipe', 'id -g') }}"
   tasks:
@@ -38,6 +39,7 @@
         - "{{ test_quiescence_script }}"
         - "{{ test_quiescence_marker }}"
         - "{{ test_quiescence_archive | dirname }}"
+        - "{{ test_iou_export }}"
 
     - name: Prepare test lab
       block:
@@ -86,6 +88,16 @@
               {{ test_node_state_root }}/0/11111111-1111-4111-8111-111111111111/1/nvram_00016
             content: "saved IOL state\n"
             mode: "0644"
+        - name: Create test IOL startup exporter
+          ansible.builtin.copy:
+            dest: "{{ test_iou_export }}"
+            mode: "0755"
+            content: |
+              #!/bin/sh
+              case "$1" in
+                */1/nvram_*) printf 'hostname R1\n' ;;
+                *) printf 'unreadable NVRAM\n' >&2; exit 1 ;;
+              esac
         - name: Create test QEMU overlay
           ansible.builtin.command:
             argv:
@@ -886,3 +898,4 @@
         - "{{ test_quiescence_script }}"
         - "{{ test_quiescence_marker }}"
         - "{{ test_quiescence_archive | dirname }}"
+        - "{{ test_iou_export }}"

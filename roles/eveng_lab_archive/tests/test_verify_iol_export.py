@@ -52,6 +52,18 @@ class VerifyIolExportTests(unittest.TestCase):
             node_dir.mkdir(parents=True)
             (node_dir / f"nvram_{node_id << 4:05d}").write_bytes(b"saved device state")
 
+    def write_embedded_config(self, node_id: int, content: bytes) -> None:
+        tree = ElementTree.parse(self.lab)
+        configs = tree.find("./objects/configs")
+        config = next(
+            (item for item in configs.findall("config") if item.get("id") == str(node_id)),
+            None,
+        )
+        if config is None:
+            config = ElementTree.SubElement(configs, "config", {"id": str(node_id)})
+        config.text = base64.b64encode(content).decode()
+        tree.write(self.lab)
+
     def test_missing_configured_iol_nodes_fail_as_a_group(self) -> None:
         self.write_lab(7, 4, {8, 9, 10, 11})
         self.write_nvram(1, 2, 3, 7)
@@ -102,16 +114,18 @@ class VerifyIolExportTests(unittest.TestCase):
         self.write_lab(1, 0, set())
         self.write_nvram(1)
         opener = MagicMock()
-        opener.open.return_value.__enter__.return_value = io.BytesIO(
-            b'{"code":201,"status":"success"}'
-        )
+        def api_open(request, timeout):
+            self.write_embedded_config(1, b"hostname IOL-1\n")
+            return io.BytesIO(b'{"code":201,"status":"success"}')
+
+        opener.open.side_effect = api_open
         export = subprocess.CompletedProcess(
             args=[], returncode=0, stdout=b"hostname IOL-1\n", stderr=b""
         )
         with patch.object(MODULE, "build_opener", return_value=opener), patch.object(
             MODULE.subprocess, "run", return_value=export
         ) as run:
-            recovered = MODULE.recover(
+            recovered, unconfigured = MODULE.recover(
                 self.lab,
                 self.state,
                 api_base_url="http://127.0.0.1",
@@ -123,6 +137,7 @@ class VerifyIolExportTests(unittest.TestCase):
             )
 
         self.assertEqual(recovered, 1)
+        self.assertEqual(unconfigured, set())
         self.assertEqual(run.call_args.args[0][-1], "/dev/stdout")
         request = opener.open.call_args.args[0]
         self.assertEqual(request.get_method(), "PUT")
@@ -135,8 +150,13 @@ class VerifyIolExportTests(unittest.TestCase):
     def test_recovery_does_not_replace_existing_config(self) -> None:
         self.write_lab(1, 0, {1})
         self.write_nvram(1)
-        with patch.object(MODULE.subprocess, "run") as run:
-            recovered = MODULE.recover(
+        export = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=b"hostname IOL-1\n", stderr=b""
+        )
+        with patch.object(MODULE.subprocess, "run", return_value=export) as run, patch.object(
+            MODULE, "build_opener"
+        ) as opener:
+            recovered, unconfigured = MODULE.recover(
                 self.lab,
                 self.state,
                 api_base_url="http://127.0.0.1",
@@ -147,7 +167,118 @@ class VerifyIolExportTests(unittest.TestCase):
                 validate_certs=True,
             )
         self.assertEqual(recovered, 0)
-        run.assert_not_called()
+        self.assertEqual(unconfigured, set())
+        run.assert_called_once()
+        opener.return_value.open.assert_not_called()
+
+    def test_stale_embedded_config_is_refreshed(self) -> None:
+        self.write_lab(1, 0, {1})
+        self.write_nvram(1)
+        export = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=b"hostname IOL-NEW\n", stderr=b""
+        )
+        opener = MagicMock()
+
+        def api_open(request, timeout):
+            self.write_embedded_config(1, b"hostname IOL-NEW\n")
+            return io.BytesIO(b'{"code":201,"status":"success"}')
+
+        opener.open.side_effect = api_open
+        with patch.object(MODULE.subprocess, "run", return_value=export), patch.object(
+            MODULE, "build_opener", return_value=opener
+        ):
+            recovered, unconfigured = MODULE.recover(
+                self.lab,
+                self.state,
+                api_base_url="http://127.0.0.1",
+                api_lab="lab.unl",
+                cookie="PHPSESSID=test",
+                iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                timeout=30,
+                validate_certs=True,
+            )
+        self.assertEqual((recovered, unconfigured), (1, set()))
+        self.assertEqual(
+            MODULE._config_bytes(MODULE._lab_state(self.lab)[2]["1"]),
+            b"hostname IOL-NEW\n",
+        )
+
+    def test_success_response_without_persisted_config_fails(self) -> None:
+        self.write_lab(1, 0, set())
+        self.write_nvram(1)
+        export = subprocess.CompletedProcess(
+            args=[], returncode=0, stdout=b"hostname IOL-1\n", stderr=b""
+        )
+        opener = MagicMock()
+        opener.open.return_value.__enter__.return_value = io.BytesIO(
+            b'{"code":201,"status":"success"}'
+        )
+        with patch.object(MODULE.subprocess, "run", return_value=export), patch.object(
+            MODULE, "build_opener", return_value=opener
+        ):
+            with self.assertRaisesRegex(ValueError, "was not persisted"):
+                MODULE.recover(
+                    self.lab,
+                    self.state,
+                    api_base_url="http://127.0.0.1",
+                    api_lab="lab.unl",
+                    cookie="PHPSESSID=test",
+                    iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                    timeout=30,
+                    validate_certs=True,
+                )
+
+    def test_started_unconfigured_iol_does_not_block_preservation(self) -> None:
+        self.write_lab(1, 0, set())
+        self.write_nvram(1)
+        export = subprocess.CompletedProcess(
+            args=[],
+            returncode=3,
+            stdout=b"",
+            stderr=b"nvram_export: no startup config\n",
+        )
+        with patch.object(MODULE.subprocess, "run", return_value=export), patch.object(
+            MODULE, "build_opener"
+        ) as opener:
+            recovered, unconfigured = MODULE.recover(
+                self.lab,
+                self.state,
+                api_base_url="http://127.0.0.1",
+                api_lab="lab.unl",
+                cookie="PHPSESSID=test",
+                iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                timeout=30,
+                validate_certs=True,
+            )
+        self.assertEqual((recovered, unconfigured), (0, {"1"}))
+        self.assertEqual(MODULE.verify(self.lab, self.state, unconfigured), (0, 1))
+        opener.return_value.open.assert_not_called()
+
+    def test_restored_embedded_config_survives_without_new_startup_config(self) -> None:
+        self.write_lab(1, 0, {1})
+        self.write_nvram(1)
+        export = subprocess.CompletedProcess(
+            args=[],
+            returncode=3,
+            stdout=b"",
+            stderr=b"nvram_export: no startup config\n",
+        )
+        with patch.object(MODULE.subprocess, "run", return_value=export), patch.object(
+            MODULE, "build_opener"
+        ) as opener:
+            recovered, unconfigured = MODULE.recover(
+                self.lab,
+                self.state,
+                api_base_url="http://127.0.0.1",
+                api_lab="lab.unl",
+                cookie="PHPSESSID=test",
+                iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                timeout=30,
+                validate_certs=True,
+            )
+        self.assertEqual((recovered, unconfigured), (0, set()))
+        self.assertEqual(MODULE.verify(self.lab, self.state, unconfigured), (1, 1))
+        opener.return_value.open.assert_not_called()
 
     def test_recovery_fails_when_saved_nvram_cannot_be_exported(self) -> None:
         self.write_lab(1, 0, set())

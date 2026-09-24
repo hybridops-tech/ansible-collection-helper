@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sys
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import MagicMock, patch
@@ -326,6 +327,50 @@ class VerifyIolExportTests(unittest.TestCase):
                     timeout=30,
                     validate_certs=True,
                 )
+
+    def test_main_emits_versioned_receipt_after_success(self) -> None:
+        self.write_lab(1, 0, {1})
+        self.write_nvram(1)
+        stdout = io.StringIO()
+        with patch.object(
+            sys,
+            "argv",
+            [
+                str(SCRIPT),
+                "--lab",
+                str(self.lab),
+                "--node-state-root",
+                str(self.state),
+            ],
+        ), patch("sys.stdout", stdout):
+            self.assertEqual(MODULE.main(), 0)
+
+        self.assertEqual(
+            stdout.getvalue().strip(),
+            "HYOPS_EVE_IOL_VERIFY_RECEIPT v=1 status=ok "
+            "expected=1 total=1 recovered=0 unconfigured=0",
+        )
+
+    def test_main_does_not_emit_receipt_after_failure(self) -> None:
+        self.write_lab(1, 0, set())
+        self.write_nvram(1)
+        stdout = io.StringIO()
+        stderr = io.StringIO()
+        with patch.object(
+            sys,
+            "argv",
+            [
+                str(SCRIPT),
+                "--lab",
+                str(self.lab),
+                "--node-state-root",
+                str(self.state),
+            ],
+        ), patch("sys.stdout", stdout), patch("sys.stderr", stderr):
+            self.assertEqual(MODULE.main(), 1)
+
+        self.assertEqual(stdout.getvalue(), "")
+        self.assertNotIn(MODULE.RECEIPT_PREFIX, stderr.getvalue())
 
 
 if __name__ == "__main__":

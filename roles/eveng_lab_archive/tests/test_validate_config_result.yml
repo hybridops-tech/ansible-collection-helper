@@ -1,0 +1,85 @@
+---
+- name: Test EVE-NG IOL verification result handling
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  tasks:
+    - name: Accept a completion receipt after transport status loss
+      block:
+        - name: Set successful verifier result with lost transport status
+          ansible.builtin.set_fact:
+            eveng_lab_archive_config_verify:
+              rc: 255
+              stdout: >-
+                HYOPS_EVE_IOL_VERIFY_RECEIPT v=1 status=ok expected=4 total=6 recovered=4 unconfigured=2
+              stdout_lines:
+                - HYOPS_EVE_IOL_VERIFY_RECEIPT v=1 status=ok expected=4 total=6 recovered=4 unconfigured=2
+              stderr: Connection to target closed.
+
+        - name: Validate successful verifier result
+          ansible.builtin.include_tasks: ../tasks/validate-config-result.yml
+
+        - name: Record accepted verifier result
+          ansible.builtin.set_fact:
+            eveng_lab_archive_transport_loss_accepted: true
+      rescue:
+        - name: Record rejected verifier result
+          ansible.builtin.set_fact:
+            eveng_lab_archive_transport_loss_accepted: false
+
+    - name: Require completion receipt acceptance
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_transport_loss_accepted | bool
+
+    - name: Reject a genuine verifier failure
+      block:
+        - name: Set failed verifier result
+          ansible.builtin.set_fact:
+            eveng_lab_archive_config_verify:
+              rc: 1
+              stdout: ""
+              stdout_lines: []
+              stderr: "EVE-NG IOL export verification failed: configuration missing"
+
+        - name: Validate failed verifier result
+          ansible.builtin.include_tasks: ../tasks/validate-config-result.yml
+
+        - name: Record unexpected verifier acceptance
+          ansible.builtin.set_fact:
+            eveng_lab_archive_failure_rejected: false
+      rescue:
+        - name: Record expected verifier rejection
+          ansible.builtin.set_fact:
+            eveng_lab_archive_failure_rejected: true
+
+    - name: Require verifier failure rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_failure_rejected | bool
+
+    - name: Reject success status without a completion receipt
+      block:
+        - name: Set incomplete verifier result
+          ansible.builtin.set_fact:
+            eveng_lab_archive_config_verify:
+              rc: 0
+              stdout: ""
+              stdout_lines: []
+              stderr: ""
+
+        - name: Validate incomplete verifier result
+          ansible.builtin.include_tasks: ../tasks/validate-config-result.yml
+
+        - name: Record unexpected incomplete-result acceptance
+          ansible.builtin.set_fact:
+            eveng_lab_archive_missing_receipt_rejected: false
+      rescue:
+        - name: Record expected incomplete-result rejection
+          ansible.builtin.set_fact:
+            eveng_lab_archive_missing_receipt_rejected: true
+
+    - name: Require missing receipt rejection
+      ansible.builtin.assert:
+        that:
+          - eveng_lab_archive_missing_receipt_rejected | bool

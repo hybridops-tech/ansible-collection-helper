@@ -24,6 +24,11 @@
 
 - name: Capture saved EVE-NG device configurations
   block:
+    - name: Reset IOL configuration verification state
+      ansible.builtin.set_fact:
+        eveng_lab_archive_config_verify_ok: false
+        eveng_lab_archive_config_verify_detail: ""
+
     - name: Request EVE-NG native configuration export
       ansible.builtin.uri:
         url: >-
@@ -60,17 +65,17 @@
         HYOPS_EVE_API_COOKIE: "{{ eveng_lab_archive_api_login.cookies_string }}"
       register: eveng_lab_archive_config_verify
       changed_when: >-
-        eveng_lab_archive_config_verify.rc == 0
-        and 'recovered=0' not in eveng_lab_archive_config_verify.stdout
+        eveng_lab_archive_config_verify.stdout | default('')
+        is regex(
+          '(?m)^HYOPS_EVE_IOL_VERIFY_RECEIPT v=1 status=ok '
+          ~ 'expected=[0-9]+ total=[0-9]+ recovered=[1-9][0-9]* '
+          ~ 'unconfigured=[0-9]+$'
+        )
       failed_when: false
       no_log: true
 
-    - name: Require exported IOL configurations
-      ansible.builtin.assert:
-        that:
-          - eveng_lab_archive_config_verify.rc == 0
-        fail_msg: >-
-          {{ eveng_lab_archive_config_verify.stderr | default('') | trim }}
+    - name: Validate exported IOL configurations
+      ansible.builtin.include_tasks: validate-config-result.yml
 
     - name: Record captured EVE-NG lab
       ansible.builtin.set_fact:
@@ -86,9 +91,10 @@
           EVE-NG saved-configuration capture failed for
           {{ eveng_lab_archive_config_relative_lab }}.
           {{
-            eveng_lab_archive_config_verify.stderr | trim
+            eveng_lab_archive_config_verify_detail
             if eveng_lab_archive_config_verify is defined
-              and eveng_lab_archive_config_verify.rc | default(0) != 0
+              and not (eveng_lab_archive_config_verify_ok | default(false) | bool)
+              and eveng_lab_archive_config_verify_detail | default('') | length > 0
             else 'timeout=' ~ eveng_lab_archive_config_export_timeout_s ~ 's; '
               ~ 'API status=' ~ (eveng_lab_archive_config_export.status | default('unknown')) ~ '; '
               ~ 'message=' ~ (

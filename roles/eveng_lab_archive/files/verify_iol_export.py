@@ -19,6 +19,9 @@ import uuid
 from xml.etree import ElementTree
 
 
+RECEIPT_PREFIX = "HYOPS_EVE_IOL_VERIFY_RECEIPT"
+
+
 def _lab_state(lab: Path):
     root = ElementTree.parse(lab).getroot()
     nodes = [
@@ -223,9 +226,9 @@ def main() -> int:
         print(f"EVE-NG IOL export verification failed: {exc}", file=sys.stderr)
         return 1
     print(
-        f"IOL configurations verified: {expected} with archived configurations, "
-        f"{total} nodes; recovered={recovered}; "
-        f"unconfigured={len(unconfigured_ids)}"
+        f"{RECEIPT_PREFIX} v=1 status=ok expected={expected} total={total} "
+        f"recovered={recovered} unconfigured={len(unconfigured_ids)}",
+        flush=True,
     )
     return 0
 

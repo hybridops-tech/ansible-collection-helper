@@ -1,0 +1,32 @@
+---
+- name: Read IOL configuration verification receipt
+  ansible.builtin.set_fact:
+    eveng_lab_archive_config_verify_receipts: >-
+      {{
+        eveng_lab_archive_config_verify.stdout_lines
+        | default([])
+        | select(
+            'match',
+            '^HYOPS_EVE_IOL_VERIFY_RECEIPT v=1 status=ok '
+            ~ 'expected=[0-9]+ total=[0-9]+ recovered=[0-9]+ '
+            ~ 'unconfigured=[0-9]+$'
+          )
+        | list
+      }}
+
+- name: Record IOL configuration verification result
+  ansible.builtin.set_fact:
+    eveng_lab_archive_config_verify_ok: >-
+      {{ eveng_lab_archive_config_verify_receipts | length == 1 }}
+    eveng_lab_archive_config_verify_detail: >-
+      transport_rc={{ eveng_lab_archive_config_verify.rc | default('unavailable') }};
+      stdout={{ eveng_lab_archive_config_verify.stdout | default('') | trim | default('none', true) }};
+      stderr={{ eveng_lab_archive_config_verify.stderr | default('') | trim | default('none', true) }}
+
+- name: Require verified IOL configuration receipt
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_config_verify_ok | bool
+    fail_msg: >-
+      EVE-NG IOL export verification did not return a valid completion receipt.
+      {{ eveng_lab_archive_config_verify_detail }}

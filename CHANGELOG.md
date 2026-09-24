@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Accepted a complete IOL verification receipt when an IAP tunnel loses the
+  final SSH status, while retaining fail-closed handling for missing or failed
+  verification.
+
 ## [0.1.11] - 2026-09-24
 
 ### Added

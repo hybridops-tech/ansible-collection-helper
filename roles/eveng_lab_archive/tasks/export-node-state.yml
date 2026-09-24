@@ -34,6 +34,7 @@
         'quiescence': {
           'method': eveng_lab_archive_quiescence_evidence.method,
           'qemu_processes_absent': true,
+          'iol_processes_absent': true,
           'script_sha256':
             eveng_lab_archive_quiescence_evidence.script_sha256
         }
@@ -69,6 +70,23 @@
       QEMU nodes are running. Shut down stateful guests inside the guest, stop
       the remaining EVE-NG nodes, and retry the export.
 
+- name: Check for running EVE-NG IOL nodes
+  ansible.builtin.shell: |
+    set -o pipefail
+    pgrep -af '[/]opt/unetlab/addons/iol/bin/' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: eveng_lab_archive_running_iol
+
+- name: Require stopped IOL nodes
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_running_iol.stdout | trim | length == 0
+    fail_msg: >-
+      IOL nodes are running. Save their configurations, stop the EVE-NG nodes,
+      and retry the export.
+
 - name: Find EVE-NG QEMU overlays
   ansible.builtin.find:
     paths: "{{ eveng_lab_archive_node_state_root }}"
@@ -85,6 +103,55 @@
         eveng_lab_archive_node_state_files.files
         | rejectattr('path', 'search', '/opt/unetlab/addons/qemu/')
         | list
+      }}
+
+- name: Find EVE-NG IOL state files
+  ansible.builtin.find:
+    paths: "{{ eveng_lab_archive_node_state_root }}"
+    patterns:
+      - "nvram_*"
+      - "vlan.dat-*"
+    file_type: file
+    recurse: true
+    follow: false
+  register: eveng_lab_archive_iol_state_files
+
+- name: Select EVE-NG IOL state
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_iol_files: >-
+      {{
+        eveng_lab_archive_iol_state_files.files
+        | map(attribute='path')
+        | map('regex_replace', '^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '')
+        | select('match', '^[0-9]+/[^/]+/[0-9]+/(nvram_[0-9]+|vlan\.dat-[0-9]+)$')
+        | list
+      }}
+    eveng_lab_archive_node_state_overlay_files: >-
+      {{
+        eveng_lab_archive_node_state_overlays
+        | map(attribute='path')
+        | map('regex_replace', '^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '')
+        | list
+      }}
+
+- name: Validate EVE-NG node-state paths
+  ansible.builtin.assert:
+    that:
+      - >-
+        eveng_lab_archive_node_state_overlay_files
+        | reject('match', '^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        | list | length == 0
+      - >-
+        eveng_lab_archive_iol_state_files.files | length
+        == eveng_lab_archive_node_state_iol_files | length
+    fail_msg: "EVE-NG node state contains an unsupported path"
+
+- name: Combine EVE-NG node-state files
+  ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_selected_files: >-
+      {{
+        (eveng_lab_archive_node_state_overlay_files
+        + eveng_lab_archive_node_state_iol_files) | sort
       }}
 
 - name: Validate EVE-NG QEMU overlays
@@ -104,10 +171,10 @@
     dest: "{{ eveng_lab_archive_remote_dir }}/node-state-members.txt"
     mode: "0600"
     content: |
-      {% for item in eveng_lab_archive_node_state_overlays | sort(attribute='path') %}
-      {{ item.path | regex_replace('^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '') }}
+      {% for item in eveng_lab_archive_node_state_selected_files %}
+      {{ item }}
       {% endfor %}
-  when: eveng_lab_archive_node_state_overlays | length > 0
+  when: eveng_lab_archive_node_state_selected_files | length > 0
 
 - name: Build EVE-NG node-state archive
   ansible.builtin.command:
@@ -128,14 +195,14 @@
       - "{{ eveng_lab_archive_remote_dir }}"
       - hybridops/capture.json
   changed_when: true
-  when: eveng_lab_archive_node_state_overlays | length > 0
+  when: eveng_lab_archive_node_state_selected_files | length > 0
 
 - name: Fetch EVE-NG node-state archive
   ansible.builtin.fetch:
     src: "{{ eveng_lab_archive_remote_dir }}/node-state.tar.gz"
     dest: "{{ _eveng_lab_archive_node_state_candidate_path }}"
     flat: true
-  when: eveng_lab_archive_node_state_overlays | length > 0
+  when: eveng_lab_archive_node_state_selected_files | length > 0
 
 - name: Remove stale candidate node-state archive
   ansible.builtin.file:
@@ -143,7 +210,7 @@
     state: absent
   delegate_to: localhost
   become: false
-  when: eveng_lab_archive_node_state_overlays | length == 0
+  when: eveng_lab_archive_node_state_selected_files | length == 0
 
 - name: Protect candidate controller node-state archive
   ansible.builtin.file:
@@ -152,7 +219,7 @@
     mode: "0600"
   delegate_to: localhost
   become: false
-  when: eveng_lab_archive_node_state_overlays | length > 0
+  when: eveng_lab_archive_node_state_selected_files | length > 0
 
 - name: Verify fetched EVE-NG node-state archive structure
   ansible.builtin.command:
@@ -164,24 +231,21 @@
   become: false
   changed_when: false
   register: eveng_lab_archive_node_state_controller_members
-  when: eveng_lab_archive_node_state_overlays | length > 0
+  when: eveng_lab_archive_node_state_selected_files | length > 0
 
-- name: Require every selected overlay in fetched node-state archive
+- name: Require every selected file in fetched node-state archive
   ansible.builtin.assert:
     that:
       - >-
         eveng_lab_archive_node_state_controller_members.stdout_lines | sort
         == ((
-          eveng_lab_archive_node_state_overlays
-          | map(attribute='path')
-          | map('regex_replace', '^' ~ (eveng_lab_archive_node_state_root | regex_escape) ~ '/', '')
-          | list
+          eveng_lab_archive_node_state_selected_files
           + ['hybridops/capture.json']
         ) | sort)
-    fail_msg: "Fetched EVE-NG node-state archive does not match the selected overlays"
+    fail_msg: "Fetched EVE-NG node-state archive does not match the selected files"
   delegate_to: localhost
   become: false
-  when: eveng_lab_archive_node_state_overlays | length > 0
+  when: eveng_lab_archive_node_state_selected_files | length > 0
 
 - name: Calculate node-state archive checksum
   ansible.builtin.stat:
@@ -190,7 +254,7 @@
   delegate_to: localhost
   become: false
   register: eveng_lab_archive_node_state_controller_stat
-  when: eveng_lab_archive_node_state_overlays | length > 0
+  when: eveng_lab_archive_node_state_selected_files | length > 0
 
 - name: Publish EVE-NG node-state archive result
   ansible.builtin.set_fact:
@@ -198,18 +262,18 @@
       {{
         eveng_lab_archive_results
         | combine({
-          'node_state_included': eveng_lab_archive_node_state_overlays | length > 0,
+          'node_state_included': eveng_lab_archive_node_state_selected_files | length > 0,
           'node_state_archive_path': (
             _eveng_lab_archive_node_state_path
-            if eveng_lab_archive_node_state_overlays | length > 0
+            if eveng_lab_archive_node_state_selected_files | length > 0
             else ''
           ),
           'node_state_sha256': (
             eveng_lab_archive_node_state_controller_stat.stat.checksum
-            if eveng_lab_archive_node_state_overlays | length > 0
+            if eveng_lab_archive_node_state_selected_files | length > 0
             else ''
           ),
-          'node_state_files': eveng_lab_archive_node_state_overlays | length,
+          'node_state_files': eveng_lab_archive_node_state_selected_files | length,
           'quiescence_method': eveng_lab_archive_quiescence_evidence.method,
           'quiescence_script_sha256':
             eveng_lab_archive_quiescence_evidence.script_sha256,

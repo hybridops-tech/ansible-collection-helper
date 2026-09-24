@@ -30,6 +30,7 @@ eveng_lab_archive_images_group: root
 eveng_lab_archive_images_path: ""
 eveng_lab_archive_images_expected_sha256: ""
 eveng_lab_archive_fixpermissions_command: /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
+eveng_lab_archive_wrapper_command: /opt/unetlab/wrappers/unl_wrapper
 eveng_lab_archive_tenant_uid_base: 32768
 eveng_lab_archive_tenant_gid: "32768"
 eveng_lab_archive_qemu_img: /opt/qemu/bin/qemu-img

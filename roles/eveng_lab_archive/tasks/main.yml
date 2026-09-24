@@ -63,6 +63,7 @@
       - eveng_lab_archive_images_owner | string | trim | length > 0
       - eveng_lab_archive_images_group | string | trim | length > 0
       - eveng_lab_archive_fixpermissions_command | string | trim | length > 0
+      - eveng_lab_archive_wrapper_command is match('^/')
       - >-
         not eveng_lab_archive_restore_images
         or _eveng_lab_archive_images_path is match('^/')

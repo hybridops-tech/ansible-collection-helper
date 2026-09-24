@@ -15,6 +15,22 @@
     fail_msg: >-
       QEMU nodes are running. Stop the lab nodes before restoring node state.
 
+- name: Check for running EVE-NG IOL nodes
+  ansible.builtin.shell: |
+    set -o pipefail
+    pgrep -af '[/]opt/unetlab/addons/iol/bin/' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: eveng_lab_archive_running_iol
+
+- name: Require stopped IOL nodes
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_running_iol.stdout | trim | length == 0
+    fail_msg: >-
+      IOL nodes are running. Stop the lab nodes before restoring node state.
+
 - name: Inspect controller node-state archive
   ansible.builtin.stat:
     path: "{{ _eveng_lab_archive_node_state_path }}"
@@ -58,10 +74,22 @@
 
 - name: Select EVE-NG node-state archive members
   ansible.builtin.set_fact:
+    eveng_lab_archive_node_state_file_members: >-
+      {{
+        eveng_lab_archive_node_state_members.stdout_lines
+        | reject('equalto', 'hybridops/capture.json')
+        | list
+      }}
     eveng_lab_archive_node_state_overlay_members: >-
       {{
         eveng_lab_archive_node_state_members.stdout_lines
         | select('match', '^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        | list
+      }}
+    eveng_lab_archive_node_state_iol_members: >-
+      {{
+        eveng_lab_archive_node_state_members.stdout_lines
+        | select('match', '^[0-9]+/[^/]+/[0-9]+/(nvram_[0-9]+|vlan\.dat-[0-9]+)$')
         | list
       }}
     eveng_lab_archive_node_state_metadata_present: >-
@@ -69,6 +97,17 @@
         'hybridops/capture.json'
         in eveng_lab_archive_node_state_members.stdout_lines
       }}
+
+- name: Validate EVE-NG node-state file layout
+  ansible.builtin.assert:
+    that:
+      - >-
+        item is match('^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
+        or item is match('^[0-9]+/[^/]+/[0-9]+/(nvram_[0-9]+|vlan\.dat-[0-9]+)$')
+    fail_msg: "EVE-NG node-state archive member has an invalid path: {{ item }}"
+  loop: "{{ eveng_lab_archive_node_state_file_members }}"
+  loop_control:
+    label: "{{ item }}"
 
 - name: Reject unsafe node-state archive members
   ansible.builtin.assert:
@@ -79,28 +118,14 @@
         | list
         | length == eveng_lab_archive_node_state_members.stdout_lines | length
       - >-
-        eveng_lab_archive_node_state_members.stdout_lines
-        | reject('match', '^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
-        | reject('equalto', 'hybridops/capture.json')
-        | list
-        | length == 0
+        eveng_lab_archive_node_state_members.stdout_lines | unique | list | length
+        == eveng_lab_archive_node_state_members.stdout_lines | length
       - >-
         eveng_lab_archive_node_state_member_types.stdout_lines
-        | select('match', '^[lh]')
+        | reject('match', '^-')
         | list
         | length == 0
     fail_msg: "EVE-NG node-state archive contains an unsafe member"
-
-- name: Require EVE-NG node-state member layout
-  ansible.builtin.assert:
-    that:
-      - >-
-        item is match('^[0-9]+/[^/]+/[0-9]+/[^/]+\.qcow2$')
-        or item == 'hybridops/capture.json'
-    fail_msg: "EVE-NG node-state archive member has an invalid path: {{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_members.stdout_lines }}"
-  loop_control:
-    label: "{{ item }}"
 
 - name: Read EVE-NG node-state capture metadata
   ansible.builtin.command:
@@ -134,12 +159,23 @@
         eveng_lab_archive_node_state_metadata.quiescence.qemu_processes_absent
         is sameas true
       - >-
+        eveng_lab_archive_node_state_iol_members | length == 0
+        or eveng_lab_archive_node_state_metadata.quiescence.iol_processes_absent
+           | default(false) is sameas true
+      - >-
         eveng_lab_archive_node_state_metadata.quiescence.method
         != 'operator-script'
         or eveng_lab_archive_node_state_metadata.quiescence.script_sha256
            is match('^[0-9a-f]{64}$')
     fail_msg: "EVE-NG node-state capture metadata is invalid"
   when: eveng_lab_archive_node_state_metadata_present | bool
+
+- name: Require quiescence evidence for IOL state
+  ansible.builtin.assert:
+    that:
+      - eveng_lab_archive_node_state_metadata_present | bool
+    fail_msg: "IOL node-state archive lacks quiescence evidence"
+  when: eveng_lab_archive_node_state_iol_members | length > 0
 
 - name: Measure expanded EVE-NG node-state archive
   ansible.builtin.command:
@@ -178,14 +214,14 @@
         | unique
         | sort
       }}
-  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
+  loop: "{{ eveng_lab_archive_node_state_file_members }}"
   loop_control:
     label: "{{ item }}"
 
 - name: Inspect existing node-state paths
   ansible.builtin.stat:
     path: "{{ eveng_lab_archive_node_state_root }}/{{ item }}"
-  loop: "{{ eveng_lab_archive_node_state_overlay_members }}"
+  loop: "{{ eveng_lab_archive_node_state_file_members }}"
   register: eveng_lab_archive_existing_node_state
   when: not eveng_lab_archive_overwrite | bool
 
@@ -247,6 +283,29 @@
       {{ eveng_lab_archive_node_state_required_bytes }} bytes, available
       {{ eveng_lab_archive_node_state_available_bytes }} bytes on the filesystem
       containing {{ eveng_lab_archive_node_state_root }}.
+
+- name: Prepare restored IOL node runtime
+  ansible.builtin.script:
+    cmd: >-
+      {{ role_path }}/files/prepare_iol_runtime.py
+      --labs-root {{ eveng_lab_archive_labs_root | quote }}
+      --state-root {{ eveng_lab_archive_node_state_root | quote }}
+      --wrapper {{ eveng_lab_archive_wrapper_command | quote }}
+      --members-json {{ eveng_lab_archive_node_state_iol_members | to_json | quote }}
+      {{ '--overwrite' if eveng_lab_archive_overwrite | bool else '' }}
+    executable: python3
+  when: eveng_lab_archive_node_state_iol_members | length > 0
+
+- name: Require prepared IOL nodes stopped
+  ansible.builtin.shell: |
+    set -o pipefail
+    pgrep -af '[/]opt/unetlab/addons/iol/bin/' || true
+  args:
+    executable: /bin/bash
+  changed_when: false
+  register: eveng_lab_archive_prepared_iol
+  failed_when: eveng_lab_archive_prepared_iol.stdout | trim | length > 0
+  when: eveng_lab_archive_node_state_iol_members | length > 0
 
 - name: Restore EVE-NG node state
   ansible.builtin.unarchive:
@@ -348,7 +407,7 @@
           'node_state_sha256':
             eveng_lab_archive_node_state_controller_stat.stat.checksum,
           'node_state_files':
-            eveng_lab_archive_node_state_overlay_members | length,
+            eveng_lab_archive_node_state_file_members | length,
           'node_state_leak_files':
             eveng_lab_archive_node_state_leak_files,
           'quiescence_method': (

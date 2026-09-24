@@ -79,16 +79,17 @@
         state: absent
       no_log: true
 
-- name: Wait for stopped EVE-NG QEMU guests
+- name: Wait for stopped EVE-NG stateful nodes
   ansible.builtin.shell: |
     set -eu
     deadline=$((
       {{ eveng_lab_archive_quiescence_start.stdout | int }}
       + {{ eveng_lab_archive_quiesce_timeout_s | int }}
     ))
-    while pgrep -f '[/]opt/qemu[^ ]*/bin/qemu-system-' >/dev/null; do
+    while pgrep -f '[/]opt/qemu[^ ]*/bin/qemu-system-' >/dev/null \
+      || pgrep -f '[/]opt/unetlab/addons/iol/bin/' >/dev/null; do
       if [ "$(date +%s)" -ge "$deadline" ]; then
-        echo 'Timed out waiting for EVE-NG QEMU guests to stop' >&2
+        echo 'Timed out waiting for EVE-NG stateful nodes to stop' >&2
         exit 21
       fi
       sleep 2
@@ -116,6 +117,7 @@
           else 'operator-attestation'
         }}
       qemu_processes_absent: true
+      iol_processes_absent: true
       verified_at: "{{ eveng_lab_archive_quiescence_time.stdout }}"
       script_sha256: >-
         {{

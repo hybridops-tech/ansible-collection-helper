@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.11] - 2026-09-24
+
+### Added
+
+- Preserved stopped EVE-NG IOL NVRAM and VLAN database state alongside QEMU
+  overlays in the checksummed node-state companion.
+- Recreated IOL runtime paths from restored lab definitions before applying
+  saved state, without copying source-host licence material.
+
+### Changed
+
+- Required explicit evidence that both QEMU and IOL processes were stopped
+  before publishing node-state archives containing IOL state.
+
+### Fixed
+
+- Recovered and verified IOL startup configurations after EVE-NG native export
+  so incomplete multi-node captures fail before archive promotion.
+- Verified restored IOL configuration continuity after the first node boot.
+
 ## [0.1.10] - 2026-08-29
 
 ### Added

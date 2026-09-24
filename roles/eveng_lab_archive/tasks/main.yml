@@ -63,6 +63,7 @@
       - eveng_lab_archive_images_owner | string | trim | length > 0
       - eveng_lab_archive_images_group | string | trim | length > 0
       - eveng_lab_archive_fixpermissions_command | string | trim | length > 0
+      - eveng_lab_archive_wrapper_command is match('^/')
       - >-
         not eveng_lab_archive_restore_images
         or _eveng_lab_archive_images_path is match('^/')
@@ -71,6 +72,7 @@
       - eveng_lab_archive_api_base_url is match('^https?://')
       - eveng_lab_archive_api_username | string | trim | length > 0
       - eveng_lab_archive_api_password_env | string | trim | length > 0
+      - eveng_lab_archive_iou_export is match('^/')
     fail_msg: "EVE-NG lab archive settings are invalid"
 
 - name: Require one EVE-NG guest quiescence method
@@ -139,17 +141,17 @@
     fail_msg: "EVE-NG lab archive folders must be safe relative paths"
   loop: "{{ eveng_lab_archive_folders }}"
 
-- name: Quiesce EVE-NG guests
-  ansible.builtin.include_tasks: quiesce.yml
-  when:
-    - eveng_lab_archive_action == 'export'
-    - eveng_lab_archive_include_node_state | bool
-
 - name: Capture saved EVE-NG device configurations
   ansible.builtin.include_tasks: capture-device-configs.yml
   when:
     - eveng_lab_archive_action == 'export'
     - eveng_lab_archive_capture_device_configs | bool
+
+- name: Quiesce EVE-NG guests
+  ansible.builtin.include_tasks: quiesce.yml
+  when:
+    - eveng_lab_archive_action == 'export'
+    - eveng_lab_archive_include_node_state | bool
 
 - name: Initialise saved-configuration result
   ansible.builtin.set_fact:

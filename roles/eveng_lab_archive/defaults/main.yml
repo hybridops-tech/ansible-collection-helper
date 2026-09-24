@@ -30,6 +30,7 @@ eveng_lab_archive_images_group: root
 eveng_lab_archive_images_path: ""
 eveng_lab_archive_images_expected_sha256: ""
 eveng_lab_archive_fixpermissions_command: /opt/unetlab/wrappers/unl_wrapper -a fixpermissions
+eveng_lab_archive_wrapper_command: /opt/unetlab/wrappers/unl_wrapper
 eveng_lab_archive_tenant_uid_base: 32768
 eveng_lab_archive_tenant_gid: "32768"
 eveng_lab_archive_qemu_img: /opt/qemu/bin/qemu-img
@@ -40,3 +41,4 @@ eveng_lab_archive_api_base_url: http://127.0.0.1
 eveng_lab_archive_api_username: admin
 eveng_lab_archive_api_password_env: EVENG_ADMIN_PASSWORD
 eveng_lab_archive_api_validate_certs: false
+eveng_lab_archive_iou_export: /opt/unetlab/scripts/iou_export

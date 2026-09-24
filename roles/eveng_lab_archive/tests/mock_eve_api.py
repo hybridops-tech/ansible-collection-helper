@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -100,6 +101,46 @@ class Handler(BaseHTTPRequestHandler):
                 config.text = "aG9zdG5hbWUgUkVTVE9SRUQK"
                 tree.write(lab, encoding="unicode")
             self._reply(200, {"status": "success", "code": 200})
+            return
+        config_marker = "/configs/"
+        if parsed.path.startswith(prefix) and config_marker in parsed.path:
+            lab_path, node_id = parsed.path[len(prefix) :].rsplit(config_marker, 1)
+            lab = self._resolve_lab(prefix + lab_path + config_marker, config_marker)
+            if lab is None:
+                return
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            if not isinstance(payload.get("data"), str):
+                self._reply(400, {"status": "fail", "message": "missing configuration"})
+                return
+            tree = ElementTree.parse(lab)
+            root = tree.getroot()
+            node = next(
+                (
+                    item
+                    for item in root.findall("./topology/nodes/node")
+                    if item.get("id") == node_id
+                ),
+                None,
+            )
+            if node is None:
+                self._reply(404, {"status": "fail", "message": "node not found"})
+                return
+            objects = root.find("objects")
+            if objects is None:
+                objects = ElementTree.SubElement(root, "objects")
+            configs = objects.find("configs")
+            if configs is None:
+                configs = ElementTree.SubElement(objects, "configs")
+            config = next(
+                (item for item in configs.findall("config") if item.get("id") == node_id),
+                None,
+            )
+            if config is None:
+                config = ElementTree.SubElement(configs, "config", {"id": node_id})
+            config.text = base64.b64encode(payload["data"].encode()).decode()
+            tree.write(lab, encoding="unicode")
+            self._reply(201, {"status": "success", "code": 201})
             return
         node_marker = "/nodes/"
         if parsed.path.startswith(prefix) and node_marker in parsed.path:

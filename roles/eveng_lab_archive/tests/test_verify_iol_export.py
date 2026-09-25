@@ -105,11 +105,44 @@ class VerifyIolExportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "IOL-1 \\(id 1\\)"):
             MODULE.verify(self.lab, self.state)
 
-    def test_started_node_without_nvram_fails(self) -> None:
+    def test_verification_without_recovery_context_rejects_missing_nvram(self) -> None:
         self.write_lab(1, 0, set())
         (self.state / "0" / LAB_ID / "1").mkdir(parents=True)
         with self.assertRaisesRegex(ValueError, "NVRAM missing"):
             MODULE.verify(self.lab, self.state)
+
+    def test_recovery_rejects_unsupported_nvram_entries(self) -> None:
+        for entry_type in ("directory", "symlink"):
+            with self.subTest(entry_type=entry_type):
+                self.write_lab(1, 0, set())
+                node_dir = self.state / "0" / LAB_ID / "1"
+                node_dir.mkdir(parents=True, exist_ok=True)
+                nvram = node_dir / "nvram_00016"
+                if entry_type == "directory":
+                    nvram.mkdir()
+                else:
+                    target = self.root / "saved-nvram"
+                    target.write_bytes(b"saved device state")
+                    nvram.symlink_to(target)
+                with self.assertRaisesRegex(ValueError, "unsupported NVRAM entry"):
+                    MODULE.verify(self.lab, self.state)
+                with patch.object(MODULE, "build_opener"), self.assertRaisesRegex(
+                    ValueError, "saved NVRAM path is unsupported"
+                ):
+                    MODULE.recover(
+                        self.lab,
+                        self.state,
+                        api_base_url="http://127.0.0.1",
+                        api_lab="lab.unl",
+                        cookie="PHPSESSID=test",
+                        iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                        timeout=30,
+                        validate_certs=True,
+                    )
+                if entry_type == "directory":
+                    nvram.rmdir()
+                else:
+                    nvram.unlink()
 
     def test_never_started_node_without_nvram_has_no_saved_state(self) -> None:
         self.write_lab(1, 0, set())
@@ -391,6 +424,36 @@ class VerifyIolExportTests(unittest.TestCase):
             stdout.getvalue().strip(),
             "HYOPS_EVE_IOL_VERIFY_RECEIPT v=1 status=ok "
             "expected=1 total=1 recovered=0 unconfigured=0",
+        )
+
+    def test_main_reports_node_without_saved_state(self) -> None:
+        self.write_lab(1, 0, set())
+        (self.state / "0" / LAB_ID / "1").mkdir(parents=True)
+        stdout = io.StringIO()
+        with patch.object(
+            sys,
+            "argv",
+            [
+                str(SCRIPT),
+                "--lab",
+                str(self.lab),
+                "--node-state-root",
+                str(self.state),
+                "--recover",
+                "--api-base-url",
+                "http://127.0.0.1",
+                "--api-lab",
+                "lab.unl",
+            ],
+        ), patch.dict(
+            MODULE.os.environ, {"HYOPS_EVE_API_COOKIE": "PHPSESSID=test"}
+        ), patch.object(MODULE, "build_opener"), patch("sys.stdout", stdout):
+            self.assertEqual(MODULE.main(), 0)
+
+        self.assertEqual(
+            stdout.getvalue().strip(),
+            "HYOPS_EVE_IOL_VERIFY_RECEIPT v=1 status=ok "
+            "expected=0 total=1 recovered=0 unconfigured=1",
         )
 
     def test_main_does_not_emit_receipt_after_failure(self) -> None:

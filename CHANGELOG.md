@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Treated a never-started EVE-NG IOL node without NVRAM as having no saved
   configuration while retaining fail-closed verification for invalid or
   unexportable saved state.
+- Rejected unsupported `nvram_*` entries instead of classifying them as absent
+  saved state.
 
 ## [0.1.11] - 2026-09-24
 

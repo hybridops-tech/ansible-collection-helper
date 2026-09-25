@@ -111,6 +111,48 @@ class VerifyIolExportTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "NVRAM missing"):
             MODULE.verify(self.lab, self.state)
 
+    def test_never_started_node_without_nvram_has_no_saved_state(self) -> None:
+        self.write_lab(1, 0, set())
+        (self.state / "0" / LAB_ID / "1").mkdir(parents=True)
+        with patch.object(MODULE, "build_opener") as opener, patch.object(
+            MODULE.subprocess, "run"
+        ) as run:
+            recovered, unconfigured = MODULE.recover(
+                self.lab,
+                self.state,
+                api_base_url="http://127.0.0.1",
+                api_lab="lab.unl",
+                cookie="PHPSESSID=test",
+                iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                timeout=30,
+                validate_certs=True,
+            )
+        self.assertEqual((recovered, unconfigured), (0, {"1"}))
+        self.assertEqual(MODULE.verify(self.lab, self.state, unconfigured), (0, 1))
+        run.assert_not_called()
+        opener.return_value.open.assert_not_called()
+
+    def test_embedded_config_is_retained_when_nvram_is_absent(self) -> None:
+        self.write_lab(1, 0, {1})
+        (self.state / "0" / LAB_ID / "1").mkdir(parents=True)
+        with patch.object(MODULE, "build_opener") as opener, patch.object(
+            MODULE.subprocess, "run"
+        ) as run:
+            recovered, unconfigured = MODULE.recover(
+                self.lab,
+                self.state,
+                api_base_url="http://127.0.0.1",
+                api_lab="lab.unl",
+                cookie="PHPSESSID=test",
+                iou_export=Path("/opt/unetlab/scripts/iou_export"),
+                timeout=30,
+                validate_certs=True,
+            )
+        self.assertEqual((recovered, unconfigured), (0, set()))
+        self.assertEqual(MODULE.verify(self.lab, self.state), (1, 1))
+        run.assert_not_called()
+        opener.return_value.open.assert_not_called()
+
     def test_stopped_iol_config_is_sent_through_eve_api(self) -> None:
         self.write_lab(1, 0, set())
         self.write_nvram(1)

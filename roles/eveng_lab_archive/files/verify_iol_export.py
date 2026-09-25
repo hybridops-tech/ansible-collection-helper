@@ -91,7 +91,8 @@ def verify(
         expected += 1
         label = f"{node.get('name', node_id)} (id {node_id})"
         if not nvram_files:
-            missing.append(f"{label}: NVRAM missing")
+            if not _valid_config(configs.get(node_id)):
+                missing.append(f"{label}: NVRAM missing")
         elif len(nvram_files) != 1:
             missing.append(f"{label}: expected one NVRAM file")
         elif nvram_files[0].stat().st_size == 0:
@@ -135,6 +136,10 @@ def recover(
         if not directories:
             continue
         label = f"{node.get('name', node_id)} (id {node_id})"
+        if not nvram_files:
+            if not _valid_config(configs.get(node_id)):
+                unconfigured_ids.add(node_id)
+            continue
         if len(nvram_files) != 1 or nvram_files[0].stat().st_size == 0:
             raise ValueError(f"{label}: saved NVRAM is unavailable")
 

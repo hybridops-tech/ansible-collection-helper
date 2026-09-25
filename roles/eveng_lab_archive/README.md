@@ -28,7 +28,8 @@ eveng_lab_archive_config_export_timeout_s: 300
 The role uses EVE-NG's local API. For stopped IOL nodes, it compares saved
 NVRAM with the embedded configuration and refreshes missing or stale content
 through that API. An existing embedded configuration is retained when the
-node has no new startup configuration; a never-configured node is skipped.
+node has no new startup configuration. A node that has never produced NVRAM is
+recorded as having no saved state and does not block capture.
 Save intended device changes to startup configuration before capture. The
 export timeout accepts values from 1 to 3600 seconds.
 After restore, EVE-NG loads embedded IOL configuration on boot. IOL NVRAM may

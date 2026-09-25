@@ -45,6 +45,7 @@ def _node_state(node_state_root: Path, lab_id: str, node_id: str):
 
     directories = []
     nvram_files = []
+    invalid_nvram_entries = []
     for tenant in node_state_root.iterdir():
         if not tenant.name.isdecimal() or not tenant.is_dir() or tenant.is_symlink():
             continue
@@ -52,12 +53,12 @@ def _node_state(node_state_root: Path, lab_id: str, node_id: str):
         if node_dir.is_symlink() or not node_dir.is_dir():
             continue
         directories.append(node_dir)
-        nvram_files.extend(
-            path
-            for path in node_dir.glob("nvram_*")
-            if path.is_file() and not path.is_symlink()
-        )
-    return directories, nvram_files
+        for path in node_dir.glob("nvram_*"):
+            if path.is_file() and not path.is_symlink():
+                nvram_files.append(path)
+            else:
+                invalid_nvram_entries.append(path)
+    return directories, nvram_files, invalid_nvram_entries
 
 
 def _config_bytes(config) -> bytes | None:
@@ -83,14 +84,18 @@ def verify(
 
     for node in nodes:
         node_id = node.attrib["id"]
-        directories, nvram_files = _node_state(node_state_root, lab_id, node_id)
+        directories, nvram_files, invalid_nvram_entries = _node_state(
+            node_state_root, lab_id, node_id
+        )
         if not directories:
             continue
         if node_id in unconfigured_ids:
             continue
         expected += 1
         label = f"{node.get('name', node_id)} (id {node_id})"
-        if not nvram_files:
+        if invalid_nvram_entries:
+            missing.append(f"{label}: unsupported NVRAM entry")
+        elif not nvram_files:
             if not _valid_config(configs.get(node_id)):
                 missing.append(f"{label}: NVRAM missing")
         elif len(nvram_files) != 1:
@@ -132,10 +137,14 @@ def recover(
 
     for node in nodes:
         node_id = node.attrib["id"]
-        directories, nvram_files = _node_state(node_state_root, lab_id, node_id)
+        directories, nvram_files, invalid_nvram_entries = _node_state(
+            node_state_root, lab_id, node_id
+        )
         if not directories:
             continue
         label = f"{node.get('name', node_id)} (id {node_id})"
+        if invalid_nvram_entries:
+            raise ValueError(f"{label}: saved NVRAM path is unsupported")
         if not nvram_files:
             if not _valid_config(configs.get(node_id)):
                 unconfigured_ids.add(node_id)

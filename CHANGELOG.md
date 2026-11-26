@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Relicensed the collection from MIT-0 to Apache-2.0 and added the standard
+  distribution notice.
+
 ### Fixed
 
 - Treated a never-started EVE-NG IOL node without NVRAM as having no saved

@@ -50,5 +50,5 @@ the secrets env file on that controller host.
 
 ## License
 
-- Code: [MIT-0](https://spdx.org/licenses/MIT-0.html)
+- Code: [Apache-2.0](https://spdx.org/licenses/Apache-2.0.html)
 - Documentation: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)

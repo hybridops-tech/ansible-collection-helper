@@ -30,7 +30,3 @@ Thumbs.db
 *.log
 *.tmp
 *.swp
-
-*output/
-*outputs/
-plugins/

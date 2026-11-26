@@ -1,8 +1,7 @@
 # Contributing to `hybridops.helper`
 
-`hybridops.helper` provides evidence collection and NetBox integration helpers. The scope is operational traceability and audit-friendly outputs, not platform-specific business logic.
-
-Design and release context is maintained in the HybridOps.Tech documentation site.
+`hybridops.helper` provides evidence collection, network-lab lifecycle and
+NetBox integration helpers used by the HybridOps runtime.
 
 ## Contribution scope
 
@@ -42,17 +41,11 @@ cd roles/<role_name>
 ansible-playbook -i tests/inventory.example.ini tests/smoke.yml
 ```
 
-NetBox-related changes should be validated against a lab NetBox instance and reflected in the smoke harness and example inventory.
+NetBox-related changes should be validated against a lab NetBox instance and
+the role-local tests.
 
-Platform integration (via the harness):
-
-```bash
-# In galaxy-collections-harness
-make workspace.clone
-make collections.sync
-make venv.refresh
-make test ROLE=<role_name>
-```
+Changes that affect Core operations must also pass the relevant
+[`hybridops-core`](https://github.com/hybridops-tech/hybridops-core) checks.
 
 ### Pull requests
 
@@ -81,3 +74,6 @@ NetBox helpers should:
 - Do not commit secrets, tokens, client IDs, or passwords.
 - Consume sensitive values via variables, Vault, or environment lookups.
 - Avoid logging sensitive values into task output and evidence artefacts.
+
+Report vulnerabilities through the [security
+policy](SECURITY.md), not a public issue.
